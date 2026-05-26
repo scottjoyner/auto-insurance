@@ -1,0 +1,65 @@
+version: 0.1.0
+status: draft
+owner: underwriting_authority_committee
+last_reviewed: null
+
+purpose: >
+  Defines initial risk appetite thresholds for the architecture phase. Values
+  are placeholders and must be reviewed before production use.
+
+mode: conservative_mvp
+
+jurisdictions:
+  allowed:
+    - SAMPLE
+  blocked: []
+  require_review_if_unknown: true
+
+products:
+  allowed:
+    - sample_personal_auto_v1
+  blocked: []
+  require_product_approval: true
+
+limits:
+  max_policy_limit_usd: 100000
+  max_customer_exposure_usd: 250000
+  max_household_exposure_usd: 500000
+  max_zip_exposure_pct: 7.5
+  max_county_exposure_pct: 15
+  max_single_product_exposure_pct: 40
+
+risk_decisions:
+  accept_if_all_checks_pass: true
+  refer_if_limit_exceeded: true
+  refer_if_geography_unknown: true
+  decline_if_jurisdiction_blocked: true
+  request_more_info_if_required_fields_missing: true
+
+capital_and_reserves:
+  require_reserve_impact_estimate: true
+  require_capital_impact_estimate: true
+  max_required_capital_delta_usd_before_review: 5000
+  max_reserve_delta_usd_before_review: 5000
+
+reinsurance:
+  assume_reinsurance_available: false
+  require_review_for_reinsurance_dependency: true
+  max_unreinsured_limit_usd: 100000
+
+manual_overrides:
+  allowed: true
+  require_reason_code: true
+  require_underwriter_level_2_above_usd: 100000
+  require_compliance_review_for_decline: true
+
+reason_codes:
+  - JURISDICTION_NOT_SUPPORTED
+  - PRODUCT_NOT_APPROVED
+  - LIMIT_REQUIRES_UNDERWRITING
+  - ZIP_CONCENTRATION_LIMIT
+  - COUNTY_CONCENTRATION_LIMIT
+  - CAPITAL_USAGE_ABOVE_THRESHOLD
+  - RESERVE_IMPACT_ABOVE_THRESHOLD
+  - REINSURANCE_REQUIRED
+  - REQUIRED_INFORMATION_MISSING
