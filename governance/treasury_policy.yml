@@ -1,0 +1,69 @@
+version: 0.1.0
+status: draft
+owner: treasury_and_investment_committee
+last_reviewed: null
+
+purpose: >
+  Defines the initial treasury and float management constraints for the
+  architecture phase. This file is a policy template and should not be used
+  for production asset management without legal, accounting, actuarial,
+  treasury, and board review.
+
+mode: simulation_only
+
+liquidity:
+  min_cash_and_treasury_pct: 60
+  min_30_day_liquidity_pct: 25
+  max_asset_duration_years: 3
+  require_daily_liquidity_report: true
+
+allowed_assets:
+  - cash
+  - treasury_bills
+  - treasury_money_market_funds
+  - insured_bank_deposits
+
+restricted_assets:
+  stablecoins:
+    allowed: false
+    max_exposure_pct: 0
+    requires_committee_approval: true
+  crypto_assets:
+    allowed: false
+    max_exposure_pct: 0
+  defi_protocols:
+    allowed: false
+    max_exposure_pct: 0
+
+counterparty_limits:
+  max_single_counterparty_pct: 10
+  require_counterparty_approval: true
+  require_counterparty_review_days: 90
+
+reserve_controls:
+  segregate_unearned_premium_reserve: true
+  segregate_loss_reserve: true
+  segregate_loss_adjustment_expense_reserve: true
+  prohibit_using_restricted_reserves_for_operating_expense: true
+
+approval_thresholds:
+  proposal_review_required_usd: 10000
+  committee_approval_required_usd: 250000
+  board_approval_required_usd: 1000000
+
+execution_controls:
+  ai_execution_allowed: false
+  require_human_approval: true
+  require_policy_check_before_execution: true
+  require_execution_receipt: true
+  require_audit_event: true
+  require_mark_to_market: true
+
+emergency_controls:
+  emergency_freeze_enabled: true
+  freeze_triggers:
+    - liquidity_below_minimum
+    - counterparty_limit_breach
+    - reserve_shortfall
+    - suspected_key_compromise
+    - smart_contract_pause
