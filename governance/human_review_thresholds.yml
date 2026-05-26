@@ -1,0 +1,59 @@
+version: 0.1.0
+status: draft
+owner: compliance_review_committee
+last_reviewed: null
+
+purpose: >
+  Defines initial human review triggers for AI, underwriting, claims, policy,
+  treasury, and blockchain workflows.
+
+ai_agent:
+  require_review_for_policy_bind: true
+  require_review_for_decline: true
+  require_review_for_coverage_dispute: true
+  require_review_for_manual_override: true
+  require_review_for_prompt_injection_detected: true
+
+underwriting:
+  review_required_above_policy_limit_usd: 100000
+  review_required_above_customer_exposure_usd: 250000
+  review_required_for_unknown_jurisdiction: true
+  review_required_for_reinsurance_dependency: true
+  review_required_for_missing_required_data: true
+
+claims:
+  review_required_for_denial: true
+  review_required_for_fraud_indicator: true
+  adjuster_review_required_above_usd: 1000
+  manager_review_required_above_usd: 10000
+  committee_review_required_above_usd: 100000
+
+policy_admin:
+  review_required_for_cancellation: true
+  review_required_for_reinstatement: true
+  review_required_for_non_renewal: true
+  review_required_for_backdated_endorsement: true
+
+quote_engine:
+  review_required_for_manual_rating_override: true
+  review_required_for_missing_rating_factor: true
+  review_required_for_non_standard_discount: true
+
+risk_appetite:
+  review_required_for_decline: true
+  review_required_for_accept_with_limits: true
+  review_required_for_concentration_limit_breach: true
+  review_required_for_capital_threshold_breach: true
+
+float_and_treasury:
+  review_required_for_all_execution: true
+  committee_review_required_above_usd: 250000
+  board_review_required_above_usd: 1000000
+  review_required_for_policy_exception: true
+  review_required_for_new_counterparty: true
+
+blockchain:
+  review_required_for_contract_upgrade: true
+  review_required_for_signer_rotation: true
+  review_required_for_emergency_pause: true
+  review_required_for_oracle_change: true
