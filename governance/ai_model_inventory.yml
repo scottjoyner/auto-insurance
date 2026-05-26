@@ -1,0 +1,54 @@
+version: 0.1.0
+status: draft
+owner: ai_governance_committee
+last_reviewed: null
+
+purpose: >
+  Inventory of AI models, prompts, tools, permissions, evaluations, and deployment
+  status used by the insurance operating system.
+
+models:
+  - model_id: agent_orchestrator_placeholder
+    provider: TBD
+    model_name: TBD
+    version: TBD
+    status: not_deployed
+    allowed_use_cases:
+      - customer_intake
+      - quote_explanation
+      - document_collection
+      - human_handoff
+    prohibited_use_cases:
+      - final_policy_bind_without_authority
+      - final_claim_denial
+      - treasury_execution
+      - rating_logic_modification
+      - smart_contract_admin
+    required_evaluations:
+      - product_explanation_accuracy
+      - coverage_hallucination_resistance
+      - prompt_injection_resistance
+      - tool_permission_compliance
+      - human_handoff_compliance
+    logging_required: true
+    human_review_required_for_restricted_actions: true
+
+prompts:
+  registry_path: governance/prompts/
+  require_versioning: true
+  require_approval_before_production: true
+  require_test_results: true
+
+tools:
+  registry_path: governance/ai_tools.yml
+  require_permission_matrix: true
+  require_input_schema_validation: true
+  require_output_schema_validation: true
+  require_audit_logging: true
+
+deployment_controls:
+  require_model_approval: true
+  require_rollback_plan: true
+  require_eval_report: true
+  require_monitoring: true
+  require_incident_response_plan: true
