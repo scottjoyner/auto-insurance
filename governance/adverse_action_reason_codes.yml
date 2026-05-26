@@ -1,0 +1,69 @@
+version: 0.1.0
+status: draft
+owner: compliance_review_committee
+last_reviewed: null
+
+purpose: >
+  Defines standardized decision reason codes for referrals, declines, requests
+  for more information, manual reviews, and customer-facing explanations.
+
+reason_codes:
+  JURISDICTION_NOT_SUPPORTED:
+    category: eligibility
+    customer_facing: true
+    requires_human_review: true
+    description: Product is not available in the requested jurisdiction.
+
+  PRODUCT_NOT_APPROVED:
+    category: product_governance
+    customer_facing: false
+    requires_human_review: true
+    description: Product is not approved for quote or bind in the requested context.
+
+  LIMIT_REQUIRES_UNDERWRITING:
+    category: underwriting
+    customer_facing: true
+    requires_human_review: true
+    description: Requested coverage limit exceeds automated authority.
+
+  ZIP_CONCENTRATION_LIMIT:
+    category: portfolio_risk
+    customer_facing: false
+    requires_human_review: true
+    description: Geographic concentration threshold would be exceeded.
+
+  COUNTY_CONCENTRATION_LIMIT:
+    category: portfolio_risk
+    customer_facing: false
+    requires_human_review: true
+    description: County-level concentration threshold would be exceeded.
+
+  CAPITAL_USAGE_ABOVE_THRESHOLD:
+    category: capital
+    customer_facing: false
+    requires_human_review: true
+    description: Estimated capital usage exceeds configured automated threshold.
+
+  RESERVE_IMPACT_ABOVE_THRESHOLD:
+    category: reserves
+    customer_facing: false
+    requires_human_review: true
+    description: Estimated reserve impact exceeds configured automated threshold.
+
+  REINSURANCE_REQUIRED:
+    category: reinsurance
+    customer_facing: false
+    requires_human_review: true
+    description: Risk requires reinsurance review before acceptance.
+
+  REQUIRED_INFORMATION_MISSING:
+    category: intake
+    customer_facing: true
+    requires_human_review: false
+    description: Required information is missing or incomplete.
+
+  MANUAL_REVIEW_REQUIRED:
+    category: workflow
+    customer_facing: true
+    requires_human_review: true
+    description: The application requires manual review before a final decision.
