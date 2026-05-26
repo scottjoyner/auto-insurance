@@ -1,0 +1,49 @@
+version: 0.1.0
+status: draft
+owner: product_approval_committee
+last_reviewed: null
+
+purpose: >
+  Tracks product, rate, form, jurisdiction, and implementation status for each
+  insurance product supported by the platform.
+
+products:
+  - product_id: sample_personal_auto_v1
+    name: Sample Personal Auto Product
+    status: architecture_sample_only
+    jurisdictions:
+      - jurisdiction: SAMPLE
+        product_approved: false
+        rate_approved: false
+        form_approved: false
+        filing_reference: null
+        effective_date: null
+        expiration_date: null
+    allowed_for_quote: true
+    allowed_for_bind: false
+    allowed_for_production: false
+    requires_human_review: true
+    notes: >
+      Placeholder product for architecture and test development only. Not a real
+      filed or approved insurance product.
+
+approval_states:
+  - draft
+  - architecture_sample_only
+  - internal_review
+  - compliance_review
+  - approved_for_testing
+  - approved_for_production
+  - suspended
+  - retired
+
+required_metadata:
+  - product_id
+  - product_version
+  - jurisdiction
+  - rate_version
+  - form_version
+  - approval_status
+  - effective_date
+  - owner
+  - audit_reference
