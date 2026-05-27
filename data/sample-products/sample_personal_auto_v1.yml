@@ -1,0 +1,185 @@
+# Sample Personal Auto Insurance Product
+# Rating DSL v1.0
+# Jurisdiction: SAMPLE
+# Architecture: SAMPLE
+
+product: sample_personal_auto_v1
+version: "1.0"
+jurisdiction: SAMPLE
+
+# ---------------------------------------------------------------------------
+# Input variables accepted from the quote context
+# ---------------------------------------------------------------------------
+variables:
+  age:
+    type: integer
+    description: Applicant age
+    min: 16
+    max: 99
+  vehicle_year:
+    type: integer
+    description: Vehicle model year
+  coverage_type:
+    type: string
+    enum: [basic, standard, premium]
+    description: Coverage tier selected
+  vehicle_value:
+    type: decimal
+    description: Current market value of the vehicle
+  driving_years:
+    type: integer
+    description: Years of licensed driving experience
+  claims_3yr:
+    type: integer
+    description: Number of at-fault claims in the past 3 years
+  credit_tier:
+    type: string
+    enum: [a, b, c, d, e]
+    description: Credit-based insurance tier (a=best, e=worst)
+
+# ---------------------------------------------------------------------------
+# Eligibility gates — all must pass for the quote to proceed
+# ---------------------------------------------------------------------------
+eligibility:
+  - name: minimum_age
+    rule: age >= 16
+    fail: "Applicant must be at least 16 years old"
+    priority: 1
+  - name: driving_experience
+    rule: driving_years >= 1
+    fail: "Must have at least 1 year of licensed driving experience"
+    priority: 2
+  - name: claims_limit
+    rule: claims_3yr <= 3
+    fail: "Maximum 3 claims in the past 3 years"
+    priority: 3
+  - name: vehicle_age
+    rule: vehicle_year >= 1990
+    fail: "Vehicle must be model year 1990 or newer"
+    priority: 4
+
+# ---------------------------------------------------------------------------
+# Surcharges — applied before discounts (in priority order)
+# ---------------------------------------------------------------------------
+surcharges:
+  - name: young_driver
+    type: percentage
+    value: 25.0
+    condition: age < 25
+    description: "25% surcharge for drivers under 25"
+    priority: 1
+  - name: senior_driver
+    type: percentage
+    value: 10.0
+    condition: age >= 70
+    description: "10% surcharge for drivers 70+"
+    priority: 2
+  - name: claims_surge
+    type: percentage
+    value: 15.0
+    condition: claims_3yr >= 2
+    description: "15% surcharge for 2+ claims in 3 years"
+    priority: 3
+  - name: poor_credit
+    type: percentage
+    value: 8.0
+    condition: credit_tier in ['d', 'e']
+    description: "8% surcharge for poor credit tier"
+    priority: 4
+
+# ---------------------------------------------------------------------------
+# Discounts — applied after surcharges (in priority order)
+# ---------------------------------------------------------------------------
+discounts:
+  - name: new_vehicle
+    type: percentage
+    value: 5.0
+    condition: vehicle_year >= 2023
+    description: "5% off for newer vehicles"
+    priority: 1
+  - name: good_driver
+    type: percentage
+    value: 10.0
+    condition: claims_3yr == 0
+    description: "10% off for clean driving history"
+    priority: 2
+  - name: experienced_driver
+    type: percentage
+    value: 3.0
+    condition: driving_years >= 10
+    description: "3% off for 10+ years experience"
+    priority: 3
+  - name: good_credit
+    type: percentage
+    value: 5.0
+    condition: credit_tier in ['a', 'b']
+    description: "5% off for good credit tier"
+    priority: 4
+
+# ---------------------------------------------------------------------------
+# Base rates by coverage type (monthly premium)
+# ---------------------------------------------------------------------------
+base_rates:
+  basic: 85.00
+  standard: 120.00
+  premium: 175.00
+
+# ---------------------------------------------------------------------------
+# Coverage line items
+# ---------------------------------------------------------------------------
+coverages:
+  liability:
+    label: "Bodily Injury & Property Liability"
+    base_amount:
+      type: variable
+      source: base_rates
+    min_premium: 50.00
+    max_premium: 500.00
+  collision:
+    label: "Collision Coverage"
+    base_amount:
+      type: formula
+      formula: "vehicle_value * 0.008"
+    multiplier:
+      type: percentage
+      value: 75.0
+  comprehensive:
+    label: "Comprehensive Coverage"
+    base_amount:
+      type: formula
+      formula: "vehicle_value * 0.005"
+    multiplier:
+      type: percentage
+      value: 65.0
+  uninsured_motorist:
+    label: "Uninsured Motorist Coverage"
+    base_amount:
+      type: fixed
+      value: 25.00
+  medical_payments:
+    label: "Medical Payments"
+    base_amount:
+      type: fixed
+      value: 15.00
+
+# ---------------------------------------------------------------------------
+# Calculation pipeline order
+# ---------------------------------------------------------------------------
+calculation_order:
+  steps:
+    - step: apply_eligibility
+    - step: calculate_base
+    - step: apply_surcharges
+    - step: apply_discounts
+    - step: calculate_coverages
+    - step: apply_coverage_multipliers
+    - step: enforce_min_max
+    - step: compute_total
+
+# ---------------------------------------------------------------------------
+# Output formatting
+# ---------------------------------------------------------------------------
+output:
+  currency: USD
+  precision: 2
+  round: half_up

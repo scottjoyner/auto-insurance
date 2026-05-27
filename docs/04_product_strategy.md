@@ -1,104 +1,53 @@
 # Product Strategy
 
-## Purpose
+## MVP Decision
 
-The product strategy defines the starting insurance product scope, why the MVP should remain constrained, and how products should be represented in the system.
+**Product**: Sample personal auto insurance
+**Status**: architecture_sample_only
+**Jurisdiction**: SAMPLE (modeled on NC)
+**Target**: Architecture prototype / MGA-style operating layer
 
-## MVP Recommendation
+## Why Sample Personal Auto
 
-The first implementation should use a sample product or low-complexity product so the architecture can prove quote, risk, policy, blockchain, audit, and treasury flows without immediately taking on full production regulatory complexity.
-
-Recommended starting options:
-
-1. Sample personal auto product for architecture only.
-2. Parametric travel delay product.
-3. Renters product.
-4. Device protection product.
-5. Personal cyber product.
-
-## Product Configuration Requirements
-
-Every product must define:
-
-```text
-product_id
-product_name
-product_version
-jurisdiction
-coverage_options
-limits
-deductibles
-eligibility_rules
-rating_variables
-rate_version
-form_version
-approval_status
-effective_date
-expiration_date
-owner
-```
+- Universal need with well-understood rating factors
+- Clear regulatory framework to model
+- Large addressable market for validation
+- Standard coverage options (liability, collision, comprehensive)
+- Well-documented NC auto insurance regulations
+- Sample values are architecture test data, not real rates
 
 ## Product Lifecycle
 
-```text
-DRAFT
-ARCHITECTURE_SAMPLE_ONLY
-INTERNAL_REVIEW
-COMPLIANCE_REVIEW
-APPROVED_FOR_TESTING
-APPROVED_FOR_PRODUCTION
-SUSPENDED
-RETIRED
+```
+DRAFT -> ARCHITECTURE_SAMPLE_ONLY -> INTERNAL_REVIEW
+  -> COMPLIANCE_REVIEW -> APPROVED_FOR_TESTING
+  -> APPROVED_FOR_PRODUCTION -> SUSPENDED or RETIRED
 ```
 
-## Product Governance
+## Sample Product
 
-Products must be listed in:
+- **ID**: sample_personal_auto_v1
+- **Version**: 2026.001
+- **Base rate**: $500/year (architecture test value)
+- **Premium range**: $500-$2,500/year (architecture test values)
+- **Coverages**: liability (required), collision (optional), comprehensive (optional)
+- **Liability limits**: 25/50, 100/300, 250/500
+- **Deductibles**: 250, 500, 1000, 2000
+- **Rating variables**: vehicle_age_band, deductible_level, driver_age_band, zip_code_factor, driving_record
 
-```text
-governance/product_approval_matrix.yml
-```
+## Future Products (Phase 3+)
 
-No product should be bindable unless:
+- Parametric travel delay
+- Renters
+- Device protection
+- Personal cyber
 
-- product is active
-- jurisdiction is allowed
-- rate version is approved for the environment
-- form version is approved for the environment
-- risk appetite allows the product
-- human review rules are satisfied
-
-## Product-to-System Flow
-
-```text
-Product config
-  -> quote-service loads rating rules
-  -> risk-appetite-service evaluates portfolio fit
-  -> policy-service binds approved quote
-  -> document-service generates package
-  -> blockchain-gateway records commitment
-```
-
-## MVP Product Boundary
-
-The initial product should not attempt to solve every real insurance complexity. The goal is to prove the operating platform.
-
-MVP should include:
-
-- one product
-- one sample jurisdiction
-- one rating plan
-- one coverage package
-- simple deductible options
-- simple eligibility rules
-- risk appetite gates
-- quote-to-bind flow
-
-MVP should exclude:
-
-- multi-state rating
-- real production filings
-- advanced actuarial pricing
-- multiple coverage forms
-- producer commission complexity
-- real claims automation at launch
+Each future product requires:
+- Product approval committee sign-off
+- Regulatory filing (if applicable)
+- Actuarial review
+- Legal review
+- Compliance review
+- Blockchain architecture review
+- AI governance review
+- Treasury policy update

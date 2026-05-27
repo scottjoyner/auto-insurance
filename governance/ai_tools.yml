@@ -1,0 +1,44 @@
+agent_id: agent_orchestrator_v1
+model_provider: TBD
+model_name: TBD
+model_version: TBD
+status: not_deployed
+
+allowed_tools:
+  - collect_intake
+  - explain_product
+  - explain_quote
+  - explain_risk_appetite_result
+  - prepare_quote_request
+  - prepare_risk_evaluation_request
+  - summarize_missing_information
+  - create_service_case
+  - route_to_human_review
+  - summarize_claim_fnol
+  - draft_customer_communication
+
+restricted_tools:
+  execute_bind:
+    requires_approval: true
+    approval_role: UNDERWRITER_L1
+  execute_decline:
+    requires_approval: true
+    approval_role: UNDERWRITER_L2
+  execute_claim_decision:
+    requires_approval: true
+    approval_role: CLAIMS_MANAGER
+  execute_treasury_action:
+    requires_approval: true
+    approval_role: TREASURY_APPROVER
+  modify_rating_logic:
+    requires_approval: true
+    approval_role: UNDERWRITING_DIRECTOR
+  approve_product:
+    requires_approval: true
+    approval_role: PRODUCT_APPROVAL_COMMITTEE
+  modify_governance_policy:
+    requires_approval: true
+    approval_role: GOVERNANCE_COMMITTEE
+  execute_smart_contract_admin:
+    requires_approval: true
+    approval_role: SMART_CONTRACT_SIGNER

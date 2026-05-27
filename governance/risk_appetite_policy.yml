@@ -1,11 +1,11 @@
-version: 0.1.0
+version: "0.2.0"
 status: draft
 owner: underwriting_authority_committee
 last_reviewed: null
 
 purpose: >
-  Defines initial risk appetite thresholds for the architecture phase. Values
-  are placeholders and must be reviewed before production use.
+  Defines risk appetite thresholds for the architecture phase. Values are
+  placeholders and must be reviewed before production use.
 
 mode: conservative_mvp
 
@@ -47,19 +47,8 @@ reinsurance:
   require_review_for_reinsurance_dependency: true
   max_unreinsured_limit_usd: 100000
 
-manual_overrides:
-  allowed: true
-  require_reason_code: true
-  require_underwriter_level_2_above_usd: 100000
-  require_compliance_review_for_decline: true
-
-reason_codes:
-  - JURISDICTION_NOT_SUPPORTED
-  - PRODUCT_NOT_APPROVED
-  - LIMIT_REQUIRES_UNDERWRITING
-  - ZIP_CONCENTRATION_LIMIT
-  - COUNTY_CONCENTRATION_LIMIT
-  - CAPITAL_USAGE_ABOVE_THRESHOLD
-  - RESERVE_IMPACT_ABOVE_THRESHOLD
-  - REINSURANCE_REQUIRED
-  - REQUIRED_INFORMATION_MISSING
+rating_override:
+  require_underwriting_approval: true
+  max_override_pct: 25
+  min_override_usd: 50
+  documented_reason_required: true

@@ -1,0 +1,140 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Rating DSL Configuration",
+  "description": "Schema for rating plan configurations in the insurance operating system",
+  "type": "object",
+  "required": ["rating_plan"],
+  "properties": {
+    "rating_plan": {
+      "type": "object",
+      "required": ["id", "version", "product_id", "jurisdiction", "base_rate"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique rating plan identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable name"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d{4}\\.\\d{3}$",
+          "description": "Semantic version (YYYY.NNN)"
+        },
+        "product_id": {
+          "type": "string",
+          "description": "Associated product ID"
+        },
+        "jurisdiction": {
+          "type": "string",
+          "description": "Jurisdiction code (e.g., SAMPLE, NC)"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "internal", "approved", "deprecated"],
+          "description": "Approval status"
+        },
+        "effective_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "expiration_date": {
+          "type": ["string", "null"],
+          "format": "date"
+        },
+        "base_rate": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Base premium rate"
+        },
+        "variables": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["categorical", "numeric"]
+              },
+              "description": { "type": "string" },
+              "factor_table": { "type": "object" },
+              "lookup_table": { "type": "string" },
+              "default": {},
+              "required": { "type": "boolean" }
+            }
+          }
+        },
+        "discounts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["id", "name", "type", "value"],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "type": { "type": "string", "enum": ["percentage", "fixed"] },
+              "value": { "type": "number" },
+              "condition": { "type": "object" },
+              "max_discount_applied": { "type": "number" }
+            }
+          }
+        },
+        "surcharges": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["id", "name", "type", "value"],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "type": { "type": "string", "enum": ["percentage", "fixed"] },
+              "value": { "type": "number" },
+              "condition": { "type": "object" },
+              "max_surcharge_applied": { "type": "number" }
+            }
+          }
+        },
+        "coverage_options": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["id", "name", "base_rate"],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "base_rate": { "type": "number" },
+              "required_for_bind": { "type": "boolean" },
+              "rating_variables": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "eligibility_rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["rule_id", "condition"],
+            "properties": {
+              "rule_id": { "type": "string" },
+              "description": { "type": "string" },
+              "condition": { "type": "object" },
+              "rejection_reason": { "type": "string" }
+            }
+          }
+        },
+        "calculation_order": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["step"],
+            "properties": {
+              "step": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,69 +1,68 @@
-version: 0.1.0
+version: "0.1.0"
 status: draft
-owner: treasury_and_investment_committee
+owner: treasury_governance_committee
 last_reviewed: null
 
 purpose: >
-  Defines the initial treasury and float management constraints for the
-  architecture phase. This file is a policy template and should not be used
-  for production asset management without legal, accounting, actuarial,
-  treasury, and board review.
+  Treasury policy for the architecture phase. All crypto assets are prohibited.
+  All treasury actions are simulation-only for MVP.
 
 mode: simulation_only
 
-liquidity:
-  min_cash_and_treasury_pct: 60
-  min_30_day_liquidity_pct: 25
-  max_asset_duration_years: 3
-  require_daily_liquidity_report: true
+premium_allocation:
+  unearned_premium_reserve_pct: 0.0
+  loss_reserve_pct: 0.0
+  loss_adjustment_expense_reserve_pct: 0.0
+  operating_capital_pct: 0.0
+  restricted_capital_pct: 0.0
+  investable_surplus_pct: 0.0
+  note: >
+    Percentages are placeholders. Real allocation requires actuarial review,
+    regulatory compliance, and treasury committee approval.
 
 allowed_assets:
-  - cash
-  - treasury_bills
-  - treasury_money_market_funds
-  - insured_bank_deposits
+  - cash_usd
+  - us_treasury_bills
 
-restricted_assets:
-  stablecoins:
-    allowed: false
-    max_exposure_pct: 0
-    requires_committee_approval: true
-  crypto_assets:
-    allowed: false
-    max_exposure_pct: 0
-  defi_protocols:
-    allowed: false
-    max_exposure_pct: 0
+prohibited_assets:
+  - crypto
+  - stablecoins
+  - commodities
+  - equities
+  - derivatives
+  - private_equity
+  - real_estate
 
-counterparty_limits:
-  max_single_counterparty_pct: 10
-  require_counterparty_approval: true
-  require_counterparty_review_days: 90
+minimum_liquidity_usd: 0
+max_duration_days: 0
+max_counterparty_exposure_pct: 0
+max_stablecoin_exposure_pct: 0
 
-reserve_controls:
-  segregate_unearned_premium_reserve: true
-  segregate_loss_reserve: true
-  segregate_loss_adjustment_expense_reserve: true
-  prohibit_using_restricted_reserves_for_operating_expense: true
+treasury_actions:
+  allowed:
+    - premium_allocation
+    - reserve_snapshot
+    - liquidity_report
+  prohibited:
+    - treasury_transfer
+    - investment_purchase
+    - investment_sale
+    - treasury_proposal
+    - smart_contract_treasury_action
 
-approval_thresholds:
-  proposal_review_required_usd: 10000
-  committee_approval_required_usd: 250000
-  board_approval_required_usd: 1000000
-
-execution_controls:
-  ai_execution_allowed: false
-  require_human_approval: true
-  require_policy_check_before_execution: true
-  require_execution_receipt: true
-  require_audit_event: true
-  require_mark_to_market: true
-
-emergency_controls:
-  emergency_freeze_enabled: true
-  freeze_triggers:
-    - liquidity_below_minimum
-    - counterparty_limit_breach
-    - reserve_shortfall
-    - suspected_key_compromise
-    - smart_contract_pause
+approval_requirements:
+  premium_allocation:
+    requires_approval: false
+    note: "Automated allocation for MVP (stubbed)"
+  reserve_snapshot:
+    requires_approval: true
+    approval_role: TREASURY_APPROVER
+  treasury_transfer:
+    requires_approval: true
+    approval_role: TREASURY_SIGNER_MULTISIG
+  investment_purchase:
+    requires_approval: true
+    approval_role: TREASURY_APPROVER
+  smart_contract_treasury_action:
+    requires_approval: true
+    approval_role: SMART_CONTRACT_SIGNER

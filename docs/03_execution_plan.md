@@ -1,148 +1,194 @@
-# Execution Plan
+# Execution Plan — Revised
 
 ## Goal
 
-Move from architecture into an implementation-ready monorepo without creating unsafe shortcuts around AI authority, regulated decisioning, treasury execution, or blockchain privacy.
+Move from architecture into a working implementation of the MVP quote-to-bind flow for the sample personal auto product.
 
-## Milestone 1: Repo Bootstrap
+## Decisions Made
 
-Tasks:
+- **Product**: Sample personal auto (architecture_sample_only)
+- **Jurisdiction**: SAMPLE (modeled on NC regulations)
+- **Service stack**: Python 3.12+, FastAPI, SQLAlchemy, Pydantic v2
+- **Blockchain**: Local Anvil only for MVP. PolicyRegistry + AuditEventRegistry contracts only.
+- **AI authority**: AI prepares bind requests only. Human approval required for all binds.
+- **Rating**: Deterministic rule-based via YAML rating DSL. ML-based is Phase 4+.
+- **Payment**: Fiat only. Stubbed payment processing for MVP.
+- **Customer channel**: HTTP API (web chat) only for MVP.
+- **Third-party data**: None for MVP. All inputs self-reported.
 
-- Create top-level docs.
-- Create HLD and LLD.
-- Create governance templates.
-- Define first implementation issues.
-- Decide first product, jurisdiction, chain target, and service stack.
+## Milestone 1: Shared Foundation (Current)
 
-Exit criteria:
+**Status**: In progress
 
-- Documentation is sufficient for a Codex implementation pass.
-- Open questions are captured.
-- The first MVP boundary is agreed.
+**Completed**:
+- Open questions resolved
+- Rating DSL defined with syntax, schema, and example
+- Sample product config created
+- AI tool interface and authority model defined
+- Shared-types core types defined (Party, Product, Quote, Risk, Policy, Claim, Event)
+- Event schemas defined for all domains
+- Risk appetite policy updated
+- Product strategy updated
 
-## Milestone 2: Shared Schemas and Local Dev
+**Remaining**:
+- Rating DSL parser implementation (packages/rating-dsl/src/parser.py)
+- Rating DSL validator implementation (packages/rating-dsl/src/validator.py)
+- Rating DSL evaluator implementation (packages/rating-dsl/src/evaluator.py)
+- Shared-types Python implementation (packages/shared-types/src/shared_types/)
+- Event schemas Python implementation (packages/event-schemas/src/event_schemas/)
+- Product approval matrix update (governance/product_approval_matrix.yml)
+- Treasury policy update (governance/treasury_policy.yml)
 
-Tasks:
+**Exit criteria**:
+- Rating DSL validates against JSON Schema
+- Rating DSL parser produces RatingPlan from YAML
+- Rating DSL evaluator produces QuoteResult from RatingPlan + inputs
+- Shared types validate via Pydantic
+- Event schemas validate via Pydantic
+- All tests pass
 
-- Add `packages/shared-types`.
-- Add `packages/event-schemas`.
-- Add `packages/product-config`.
-- Add `packages/rating-dsl`.
-- Add Docker Compose with PostgreSQL, Redis, Neo4j, MinIO, and local EVM chain.
+## Milestone 2: Quote Service MVP
 
-Exit criteria:
+**Status**: Not started
 
-- Local stack boots.
-- Shared event envelope validates.
-- Sample product config validates.
+**Tasks**:
+- Create quote-service skeleton (FastAPI app)
+- Implement quote endpoint (POST /quotes)
+- Integrate rating DSL evaluator
+- Integrate risk appetite evaluation
+- Implement quote retrieval endpoint (GET /quotes/{quote_id})
+- Implement quote acceptance endpoint (POST /quotes/{quote_id}/accept)
+- Add event emission for QuoteGenerated, QuoteAccepted
+- Add audit logging
+- Add comprehensive tests (unit, integration, regression)
 
-## Milestone 3: Quote and Risk Core
+**Exit criteria**:
+- POST /quotes returns QuoteResult with full explainability
+- GET /quotes/{quote_id} returns quote with status history
+- POST /quotes/{quote_id}/accept transitions status to ACCEPTED
+- All events emitted and validated
+- All tests pass
 
-Tasks:
+## Milestone 3: Risk Appetite Service MVP
 
-- Implement quote-service skeleton.
-- Implement deterministic rating path.
-- Implement risk-appetite-service skeleton.
-- Add risk appetite policy loader.
-- Add quote-to-risk integration tests.
+**Status**: Not started
 
-Exit criteria:
+**Tasks**:
+- Create risk-appetite-service skeleton
+- Implement YAML policy loader
+- Implement risk evaluation endpoint (POST /risk-appetite/evaluate)
+- Implement exposure summary endpoint (GET /risk-appetite/exposure-summary)
+- Implement scenario endpoint (POST /risk-appetite/scenarios)
+- Integrate with portfolio state (stubbed for MVP)
+- Add event emission for RiskAppetiteEvaluated
+- Add comprehensive tests
 
-- Sample quote can be generated.
-- Risk appetite result is returned.
-- Quote snapshot is replayable.
+**Exit criteria**:
+- Risk evaluation returns decision with reason codes
+- Policy loading from YAML works correctly
+- All tests pass
 
-## Milestone 4: Policy Bind and Audit
+## Milestone 4: Policy Service MVP
 
-Tasks:
+**Status**: Not started
 
-- Implement policy-service skeleton.
-- Add policy lifecycle state machine.
-- Add document hash support.
-- Add audit event persistence.
+**Tasks**:
+- Create policy-service skeleton
+- Implement bind endpoint (POST /policies/bind)
+- Implement policy retrieval (GET /policies/{policy_id})
+- Implement policy lifecycle state machine
+- Implement audit packet generation
+- Implement blockchain gateway integration (stubbed)
+- Add human approval workflow
+- Add comprehensive tests
 
-Exit criteria:
+**Exit criteria**:
+- Bind flow completes with audit packet
+- Policy lifecycle transitions enforced
+- All tests pass
 
-- Accepted quote can bind.
-- Policy version is created.
-- Audit packet is generated.
+## Milestone 5: Blockchain Gateway MVP
 
-## Milestone 5: Blockchain Commitments
+**Status**: Not started
 
-Tasks:
+**Tasks**:
+- Create blockchain-gateway service (TypeScript)
+- Implement PolicyRegistry contract (Solidity)
+- Implement AuditEventRegistry contract (Solidity)
+- Implement contract deployment scripts (Hardhat)
+- Implement gateway service (ethers.js)
+- Deploy to local Anvil
+- Implement policy commitment flow
+- Add comprehensive tests
 
-- Add contract workspace.
-- Implement PolicyRegistry contract.
-- Add blockchain-gateway skeleton.
-- Add outbox worker.
-- Add reconciliation job.
+**Exit criteria**:
+- Contracts deploy to local Anvil
+- Policy commitments written and verifiable
+- All tests pass
 
-Exit criteria:
+## Milestone 6: AI Agent Orchestrator MVP
 
-- Policy hash is committed to local chain.
-- Chain receipt is indexed.
-- Reconciliation report passes.
+**Status**: Not started
 
-## Milestone 6: AI Agent Orchestration
+**Tasks**:
+- Create ai-agent-orchestrator service
+- Implement session management
+- Implement intent classification
+- Implement tool permission enforcement
+- Implement AI service integration (quote, risk, policy)
+- Implement human review routing
+- Implement audit logging
+- Add comprehensive tests
 
-Tasks:
+**Exit criteria**:
+- End-to-end AI-assisted quote flow works
+- Tool permissions enforced
+- All tests pass
 
-- Implement agent session model.
-- Add product/rate/form retrieval stubs.
-- Add tool permission matrix.
-- Connect agent to quote and risk services.
-- Add human handoff workflow.
+## Milestone 7: Claims Service MVP
 
-Exit criteria:
+**Status**: Not started
 
-- Agent can collect intake and generate a draft quote.
-- Agent cannot bind, decline, pay, or execute treasury actions unless explicitly enabled.
-- Agent audit log captures tool calls and context.
+**Tasks**:
+- Create claims-service skeleton
+- Implement FNOL endpoint (POST /claims)
+- Implement coverage check (POST /claims/{claim_id}/coverage-check)
+- Implement claim retrieval (GET /claims/{claim_id})
+- Add event emission for ClaimFNOLReceived
+- Add comprehensive tests
 
-## Milestone 7: Premium, Reserves, and Treasury Simulation
+**Exit criteria**:
+- FNOL creates claim with proper event
+- Coverage check verifies against policy
+- All tests pass
 
-Tasks:
+## Milestone 8: Treasury Service MVP
 
-- Add premium cashflow model.
-- Add reserve snapshot model.
-- Add treasury policy evaluator.
-- Add liquidity ladder.
-- Add ReserveAttestation contract skeleton.
+**Status**: Not started
 
-Exit criteria:
+**Tasks**:
+- Create treasury-service skeleton
+- Implement premium allocation (stubbed)
+- Implement reserve snapshot (stubbed)
+- Implement liquidity ladder (stubbed)
+- Add event emission for PremiumAllocated, ReserveSnapshot
+- Add comprehensive tests
 
-- Premium allocation can be simulated.
-- Reserve snapshot is generated and hashed.
-- Treasury proposal is evaluated against policy.
+**Exit criteria**:
+- Premium allocation stubbed and audited
+- Reserve snapshot stubbed and audited
+- All tests pass
 
-## Milestone 8: Claims MVP
+## Implementation Notes
 
-Tasks:
-
-- Implement claims-service skeleton.
-- Add FNOL intake.
-- Add coverage verification.
-- Add evidence metadata and hashing.
-- Add reserve and claim decision workflows.
-
-Exit criteria:
-
-- Claim can be created against active policy.
-- Coverage check references policy version.
-- Claim decision audit packet exists.
-
-## Milestone 9: Compliance Export and Hardening
-
-Tasks:
-
-- Add audit packet export.
-- Add model inventory checks.
-- Add adverse action reason code registry.
-- Add security tests.
-- Add compliance tests.
-
-Exit criteria:
-
-- Quote, policy, claim, and treasury audit packets export.
-- AI and human decision paths are traceable.
-- Security and compliance test suite passes.
+- Each service has its own Dockerfile
+- docker-compose.yml manages local dev stack
+- Shared types and event schemas are published as local packages
+- All services validate inputs via Pydantic
+- All services emit events via the event system
+- All services log audit events
+- All services have comprehensive tests
+- No real payment processing in MVP
+- No real blockchain deployment in MVP
+- No AI model modification of rating logic
+- No AI authority to bind, decline, or deny in MVP
