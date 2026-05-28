@@ -28,3 +28,5 @@ Thumbs.db
 
 # mypy
 .mypy_cache/
+
+packages/blockchain-gateway/node_modules/
