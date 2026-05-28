@@ -2,119 +2,248 @@
 
 ## Purpose
 
-This document defines initial API contract boundaries. The first implementation should convert these into OpenAPI specs.
+This document defines the API contract boundaries for the blockchain gateway service.
+All write endpoints support idempotency keys, authenticated actors, correlation IDs,
+audit logging, schema validation, and versioned response shapes.
 
-## Common Requirements
+## Blockchain Gateway Endpoints
 
-Every write endpoint should support:
-
-- idempotency key
-- authenticated actor
-- correlation ID
-- audit logging
-- schema validation
-- versioned response shape
-
-## Quote Service
-
-```http
-POST /quotes
-GET /quotes/{quote_id}
-POST /quotes/{quote_id}/recalculate
-POST /quotes/{quote_id}/accept
-POST /quotes/{quote_id}/expire
-```
-
-Quote response should include:
-
-```json
-{
-  "quote_id": "quote_123",
-  "status": "GENERATED",
-  "product_id": "sample_personal_auto_v1",
-  "product_version": "2026.001",
-  "jurisdiction": "SAMPLE",
-  "premium": 500.0,
-  "bind_eligible": false,
-  "reason_codes": [],
-  "input_snapshot_hash": "hash",
-  "expires_at": "2026-06-26T00:00:00Z"
-}
-```
-
-## Risk Appetite Service
-
-```http
-POST /risk-appetite/evaluate
-GET /risk-appetite/policies/current
-POST /risk-appetite/scenarios
-GET /risk-appetite/exposure-summary
-```
-
-Decision response should include:
-
-```json
-{
-  "decision": "REFER_TO_UNDERWRITER",
-  "reason_codes": ["LIMIT_REQUIRES_UNDERWRITING"],
-  "required_approvals": ["UNDERWRITER_L2"],
-  "audit_reference": "audit_123"
-}
-```
-
-## Policy Service
-
-```http
-POST /policies/bind
-GET /policies/{policy_id}
-POST /policies/{policy_id}/endorsements
-POST /policies/{policy_id}/cancel
-POST /policies/{policy_id}/renew
-POST /policies/{policy_id}/sync-chain
-```
-
-## Claims Service
-
-```http
-POST /claims
-GET /claims/{claim_id}
-POST /claims/{claim_id}/evidence
-POST /claims/{claim_id}/coverage-check
-POST /claims/{claim_id}/reserve
-POST /claims/{claim_id}/decision
-POST /claims/{claim_id}/payout
-```
-
-## AI Agent Orchestrator
-
-```http
-POST /agent/sessions
-POST /agent/sessions/{session_id}/messages
-POST /agent/sessions/{session_id}/handoff
-GET /agent/sessions/{session_id}/audit
-```
-
-## Treasury Service
-
-```http
-POST /treasury/premium-received
-POST /treasury/reserve-snapshots
-GET /treasury/liquidity-ladder
-POST /treasury/proposals
-POST /treasury/proposals/{proposal_id}/approve
-POST /treasury/proposals/{proposal_id}/execute
-GET /treasury/solvency-dashboard
-```
-
-## Blockchain Gateway
+### Policy Registration
 
 ```http
 POST /chain/policies/register
+Content-Type: application/json
+
+{
+  "policy_id": "pol_123",
+  "commitment_hash": "0xabc...",
+  "status": "PENDING"
+}
+
+Response:
+{
+  "success": true,
+  "outbox_id": "uuid-here",
+  "policy_id": "pol_123",
+  "message": "Policy queued for blockchain registration"
+}
+```
+
+### Update Policy Status
+
+```http
+POST /chain/policies/{policy_id}/status
+Content-Type: application/json
+
+{
+  "status": "ACTIVE"
+}
+
+Response:
+{
+  "success": true,
+  "outbox_id": "uuid-here",
+  "policy_id": "pol_123",
+  "message": "Status update queued for blockchain"
+}
+```
+
+### Record Premium Event
+
+```http
 POST /chain/premiums/record
+Content-Type: application/json
+
+{
+  "policy_id": "pol_123",
+  "commitment_hash": "0xabc..."
+}
+
+Response:
+{
+  "success": true,
+  "outbox_id": "uuid-here",
+  "policy_id": "pol_123",
+  "message": "Premium event queued for blockchain submission"
+}
+```
+
+### Record Claim Event
+
+```http
 POST /chain/claims/record
+Content-Type: application/json
+
+{
+  "policy_id": "pol_123",
+  "commitment_hash": "0xabc..."
+}
+
+Response:
+{
+  "success": true,
+  "outbox_id": "uuid-here",
+  "policy_id": "pol_123",
+  "message": "Claim event queued for blockchain submission"
+}
+```
+
+### Attest Reserves
+
+```http
 POST /chain/reserves/attest
+Content-Type: application/json
+
+{
+  "policy_id": "pol_123",
+  "commitment_hash": "0xabc..."
+}
+
+Response:
+{
+  "success": true,
+  "outbox_id": "uuid-here",
+  "policy_id": "pol_123",
+  "message": "Reserve attestation queued for blockchain submission"
+}
+```
+
+### Get Transaction
+
+```http
 GET /chain/transactions/{tx_hash}
-GET /chain/reconcile
+
+Response:
+{
+  "tx_hash": "0xdef...",
+  "block_number": 42,
+  "status": "confirmed",
+  "gas_used": 21000,
+  "logs": 1
+}
+```
+
+### Reconcile
+
+```http
+GET /chain/reconcile?window_hours=24
+
+Response:
+{
+  "timestamp": "2026-05-27T22:00:00Z",
+  "window_hours": 24,
+  "local_events_count": 10,
+  "chain_events_count": 10,
+  "missing_from_chain": [],
+  "missing_from_local": [],
+  "hash_mismatches": [],
+  "discrepancies": [],
+  "is_clean": true
+}
+```
+
+### Query Policy
+
+```http
+GET /policies/{policy_id}
+
+Response:
+{
+  "policy_id": "0xabc...",
+  "commitment_hash": "0xdef...",
+  "status": "ACTIVE",
+  "committed_at": 1716854400,
+  "committed_by": "0x123..."
+}
+```
+
+### Query Policy Status
+
+```http
+GET /policies/{policy_id}/status
+
+Response:
+{
+  "policy_id": "pol_123",
+  "status": "ACTIVE"
+}
+```
+
+### Query Policy Events
+
+```http
+GET /policies/{policy_id}/events
+
+Response:
+[
+  {
+    "index": 0,
+    "event_type": "BIND",
+    "policy_id": "0xabc...",
+    "commitment_hash": "0xdef...",
+    "committed_at": 1716854400,
+    "committed_by": "0x123..."
+  }
+]
+```
+
+### Query Events by Type
+
+```http
+GET /events/by-type/{event_type}
+
+Response:
+[
+  {
+    "index": 0,
+    "event_type": "BIND",
+    "policy_id": "0xabc...",
+    "commitment_hash": "0xdef...",
+    "committed_at": 1716854400,
+    "committed_by": "0x123..."
+  }
+]
+```
+
+### Outbox Stats
+
+```http
+GET /outbox/stats
+
+Response:
+{
+  "pending": 5,
+  "submitted": 3,
+  "committed": 42,
+  "failed": 0
+}
+```
+
+### Health Check
+
+```http
+GET /health
+
+Response:
+{
+  "status": "healthy",
+  "service": "blockchain-gateway",
+  "connected": true,
+  "chain_id": 31337,
+  "outbox": {
+    "pending": 0,
+    "submitted": 0,
+    "committed": 42,
+    "failed": 0
+  },
+  "reconciler_enabled": true,
+  "signer_policy": {
+    "policy_commiters": [],
+    "status_updaters": [],
+    "event_recorders": [],
+    "allow_all": true
+  }
+}
 ```
 
 ## Error Format
@@ -129,3 +258,24 @@ GET /chain/reconcile
   }
 }
 ```
+
+## Status Enum
+
+| Value      | Description              |
+|------------|--------------------------|
+| PENDING    | Policy committed, pending activation |
+| ACTIVE     | Policy is active         |
+| ENDORSEMENT | Policy under endorsement review |
+| CANCELLED  | Policy has been cancelled |
+| EXPIRED    | Policy has expired       |
+
+## Event Type Enum
+
+| Value            | Description              |
+|------------------|--------------------------|
+| BIND             | Policy binding event     |
+| ENDORSEMENT      | Endorsement event        |
+| CANCELLATION     | Cancellation event       |
+| RENEWAL          | Renewal event            |
+| CLAIM_FILING     | Claim filing event       |
+| CLAIM_SETTLEMENT | Claim settlement event   |

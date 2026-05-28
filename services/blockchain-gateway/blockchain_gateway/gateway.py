@@ -170,13 +170,17 @@ class AuditEventRecord:
     committed_by: str  # hex address
 
     @classmethod
-    def from_tuple(cls, data: tuple, event_type_name: str) -> "AuditEventRecord":
+    def from_tuple(cls, data: tuple) -> "AuditEventRecord":
+        # data layout from Solidity struct:
+        # [0]=eventType(bytes32), [1]=policyId(bytes32),
+        # [2]=commitmentHash(bytes32), [3]=committedAt(uint256),
+        # [4]=committedBy(address)
         return cls(
-            event_type=event_type_name,
-            policy_id=Web3.to_hex(data[0]),
-            commitment_hash=Web3.to_hex(data[1]),
-            committed_at=int(data[2]),
-            committed_by=Web3.to_checksum_address(data[3]),
+            event_type=Web3.to_hex(data[0]),
+            policy_id=Web3.to_hex(data[1]),
+            commitment_hash=Web3.to_hex(data[2]),
+            committed_at=int(data[3]),
+            committed_by=Web3.to_checksum_address(data[4]),
         )
 
     def to_dict(self) -> dict[str, Any]:

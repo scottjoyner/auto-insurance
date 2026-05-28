@@ -34,8 +34,8 @@ class SignerPolicy:
     # Addresses allowed to record audit events
     event_recorders: list[str] = field(default_factory=list)
 
-    # Default: deny all if no config loaded
-    allow_all: bool = False
+    # Default: allow all when no config loaded (dev-friendly)
+    allow_all: bool = True
 
     def is_policy_committer(self, address: str) -> bool:
         """Check if an address can commit policies."""

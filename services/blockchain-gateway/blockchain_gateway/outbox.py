@@ -17,7 +17,7 @@ import logging
 import sqlite3
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
@@ -57,15 +57,10 @@ class OutboxEntry:
 
     @classmethod
     def from_row(cls, row: tuple) -> "OutboxEntry":
-        keys = [
-            "id", "event_type", "payload", "contract", "method",
-            "status", "tx_hash", "retry_count", "last_error",
-            "created_at", "updated_at", "next_retry_at",
-        ]
         return cls(
             id=row[0],
             event_type=row[1],
-            **json.loads(row[2]),
+            payload=row[2],
             contract=row[3],
             method=row[4],
             status=row[5],
@@ -125,7 +120,7 @@ class OutboxStore:
             """, (
                 entry.id,
                 entry.event_type,
-                json.dumps(entry.to_dict()),
+                entry.payload,
                 entry.contract,
                 entry.method,
                 entry.status,
@@ -182,21 +177,28 @@ class OutboxStore:
         """Mark an entry as failed with error message."""
         now = datetime.now(timezone.utc).isoformat()
         with sqlite3.connect(self.db_path) as conn:
+            # Get current retry_count
+            cursor = conn.execute(
+                "SELECT retry_count FROM outbox WHERE id = ?",
+                (entry_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return
+            retry_count = row[0]
+            # Calculate next_retry_at with exponential backoff
+            next_retry_at = datetime.now(timezone.utc) + timedelta(
+                seconds=2 * retry_count + 1
+            )
             conn.execute("""
                 UPDATE outbox
                 SET status = 'failed',
                     retry_count = retry_count + 1,
                     last_error = ?,
                     updated_at = ?,
-                    next_retry_at = datetime(
-                        'now',
-                        '+' || (
-                            SELECT 2 * retry_count + 1
-                            FROM outbox WHERE id = ?
-                        ) || 'seconds'
-                    )
+                    next_retry_at = ?
                 WHERE id = ?
-            """, (error, now, entry_id, entry_id))
+            """, (error, now, next_retry_at.isoformat(), entry_id))
             conn.commit()
 
     def get_entry(self, entry_id: str) -> OutboxEntry | None:
@@ -233,3 +235,35 @@ class OutboxStore:
                 )
                 stats[status] = cursor.fetchone()[0]
             return stats
+
+    def get_events_in_window(self, start: datetime, end: datetime) -> list[dict[str, Any]]:
+        """Get outbox entries in a time window (for reconciliation).
+
+        Returns list of dicts with keys: id, commitment_hash, event_type,
+        committed_at, committed_by — compatible with Reconciler interface.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("""
+                SELECT id, payload, created_at
+                FROM outbox
+                WHERE status IN ('pending', 'failed', 'submitted')
+                  AND created_at >= ?
+                  AND created_at <= ?
+                ORDER BY created_at ASC
+            """, (start.isoformat(), end.isoformat()))
+            results = []
+            for row in cursor.fetchall():
+                entry_id, payload_json, created_at = row
+                try:
+                    payload = json.loads(payload_json)
+                except (json.JSONDecodeError, TypeError):
+                    payload = {}
+                evt_type = payload.get("event_type", "UNKNOWN")
+                results.append({
+                    "id": entry_id,
+                    "commitment_hash": payload.get("commitment_hash", ""),
+                    "event_type": evt_type,
+                    "committed_at": int(datetime.fromisoformat(created_at).replace(tzinfo=timezone.utc).timestamp()) if created_at else 0,
+                    "committed_by": "local",
+                })
+            return results

@@ -5,6 +5,7 @@ Provides endpoints for other services to:
 - Record audit events
 - Query on-chain state
 - Manage the outbox
+- Reconcile local vs chain state
 """
 
 from __future__ import annotations
@@ -52,7 +53,15 @@ gateway = BlockchainGateway(
 
 outbox_store = OutboxStore(settings.outbox_db_path)
 signer_policy = SignerPolicyManager()
-reconciler: Reconciler | None = None  # Set during startup
+
+# Load signer policy from YAML if available
+if settings.signer_policy_file:
+    signer_policy.load_from_yaml(settings.signer_policy_file)
+
+# Initialize reconciler with outbox as the local store (when reconciliation is enabled)
+reconciler: Reconciler | None = None
+if settings.reconciliation_enabled:
+    reconciler = Reconciler(gateway, outbox_store)
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +117,32 @@ class ReconciliationReportResponse(BaseModel):
     hash_mismatches: list[str]
     discrepancies: list[str]
     is_clean: bool
+
+
+class ErrorResponse(BaseModel):
+    """Error response format."""
+    error: dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# Middleware for standard error format
+# ---------------------------------------------------------------------------
+
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": {
+                "code": "INTERNAL_ERROR",
+                "message": str(exc),
+                "details": [],
+                "correlation_id": str(UUID(int=hash(str(request.url)))),
+            }
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -168,92 +203,22 @@ def _poll_outbox_and_submit():
 
 
 # ---------------------------------------------------------------------------
-# API endpoints
+# Helper: enqueue to outbox
 # ---------------------------------------------------------------------------
 
-
-@app.post("/policies/commit")
-async def api_commit_policy(request: CommitPolicyRequest) -> dict[str, Any]:
-    """Commit a policy to the blockchain (direct, no outbox)."""
-    signer_addr = gateway.signer_address
-    if not signer_addr:
-        raise HTTPException(status_code=500, detail="Signer not configured")
-    try:
-        signer_policy.enforce(signer_addr, PolicyAction.COMMIT_POLICY)
-    except SignerPolicyError as e:
-        raise HTTPException(status_code=403, detail=str(e))
-
-    try:
-        status_map = {
-            "PENDING": PolicyStatus.PENDING,
-            "ACTIVE": PolicyStatus.ACTIVE,
-            "ENDORSEMENT": PolicyStatus.ENDORSEMENT,
-            "CANCELLED": PolicyStatus.CANCELLED,
-            "EXPIRED": PolicyStatus.EXPIRED,
-        }
-        status = status_map.get(request.status, PolicyStatus.PENDING)
-        tx_hash = gateway.commit_policy(
-            policy_id=request.policy_id,
-            commitment_hash=request.commitment_hash,
-            status=status,
-        )
-        return {"success": True, "tx_hash": tx_hash, "policy_id": request.policy_id}
-    except BlockchainGatewayError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/policies/{policy_id}/status")
-async def api_update_policy_status(
-    policy_id: str, request: UpdateStatusRequest
-) -> dict[str, Any]:
-    """Update a policy's status on the blockchain."""
-    signer_addr = gateway.signer_address
-    if not signer_addr:
-        raise HTTPException(status_code=500, detail="Signer not configured")
-    try:
-        signer_policy.enforce(signer_addr, PolicyAction.UPDATE_STATUS)
-    except SignerPolicyError as e:
-        raise HTTPException(status_code=403, detail=str(e))
-
-    try:
-        status_map = {
-            "PENDING": PolicyStatus.PENDING,
-            "ACTIVE": PolicyStatus.ACTIVE,
-            "ENDORSEMENT": PolicyStatus.ENDORSEMENT,
-            "CANCELLED": PolicyStatus.CANCELLED,
-            "EXPIRED": PolicyStatus.EXPIRED,
-        }
-        status = status_map.get(request.status, PolicyStatus.PENDING)
-        tx_hash = gateway.update_policy_status(
-            policy_id=policy_id,
-            new_status=status,
-        )
-        return {"success": True, "tx_hash": tx_hash, "policy_id": policy_id}
-    except BlockchainGatewayError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/events/record")
-async def api_record_event(request: RecordEventRequest) -> dict[str, Any]:
-    """Record an audit event on the blockchain (via outbox)."""
-    signer_addr = gateway.signer_address
-    if not signer_addr:
-        raise HTTPException(status_code=500, detail="Signer not configured")
-    try:
-        signer_policy.enforce(signer_addr, PolicyAction.RECORD_EVENT)
-    except SignerPolicyError as e:
-        raise HTTPException(status_code=403, detail=str(e))
-
-    # Insert into outbox
+def _enqueue_to_outbox(
+    event_type: str,
+    contract: str,
+    method: str,
+    payload: dict[str, Any],
+) -> str:
+    """Insert an entry into the outbox and return its ID."""
     entry = OutboxEntry(
-        id=str(UUID(int=hash(request.policy_id + request.event_type))),
-        event_type=request.event_type,
-        payload=json.dumps({
-            "policy_id": request.policy_id,
-            "commitment_hash": request.commitment_hash,
-        }),
-        contract="audit_event_registry",
-        method="recordEvent",
+        id=str(UUID(int=hash(event_type + json.dumps(payload, sort_keys=True)))),
+        event_type=event_type,
+        payload=json.dumps(payload),
+        contract=contract,
+        method=method,
         status="pending",
         tx_hash=None,
         retry_count=0,
@@ -262,16 +227,213 @@ async def api_record_event(request: RecordEventRequest) -> dict[str, Any]:
         updated_at=datetime.now(timezone.utc).isoformat(),
     )
     outbox_store.insert(entry)
+    return entry.id
+
+
+# ---------------------------------------------------------------------------
+# API endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post("/chain/policies/register", response_model=dict[str, Any])
+async def api_register_policy(request: CommitPolicyRequest) -> dict[str, Any]:
+    """Register a policy on the blockchain (via outbox for reliability)."""
+    signer_addr = gateway.signer_address
+    if not signer_addr:
+        raise HTTPException(status_code=500, detail="Signer not configured")
+    try:
+        signer_policy.enforce(signer_addr, PolicyAction.COMMIT_POLICY)
+    except SignerPolicyError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+    # Validate status
+    status_map = {
+        "PENDING": PolicyStatus.PENDING,
+        "ACTIVE": PolicyStatus.ACTIVE,
+        "ENDORSEMENT": PolicyStatus.ENDORSEMENT,
+        "CANCELLED": PolicyStatus.CANCELLED,
+        "EXPIRED": PolicyStatus.EXPIRED,
+    }
+    status = status_map.get(request.status)
+    if status is None:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {request.status}")
+
+    # Enqueue to outbox for reliable submission
+    outbox_id = _enqueue_to_outbox(
+        event_type=request.status,
+        contract="policy_registry",
+        method="commitPolicy",
+        payload={
+            "policy_id": request.policy_id,
+            "commitment_hash": request.commitment_hash,
+        },
+    )
 
     return {
         "success": True,
-        "outbox_id": entry.id,
+        "outbox_id": outbox_id,
         "policy_id": request.policy_id,
-        "message": "Event queued for blockchain submission",
+        "message": "Policy queued for blockchain registration",
     }
 
 
-@app.get("/policies/{policy_id}")
+@app.post("/chain/policies/{policy_id}/status", response_model=dict[str, Any])
+async def api_update_policy_status(
+    policy_id: str, request: UpdateStatusRequest
+) -> dict[str, Any]:
+    """Update a policy's status on the blockchain (via outbox)."""
+    signer_addr = gateway.signer_address
+    if not signer_addr:
+        raise HTTPException(status_code=500, detail="Signer not configured")
+    try:
+        signer_policy.enforce(signer_addr, PolicyAction.UPDATE_STATUS)
+    except SignerPolicyError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+    # Validate status
+    status_map = {
+        "PENDING": PolicyStatus.PENDING,
+        "ACTIVE": PolicyStatus.ACTIVE,
+        "ENDORSEMENT": PolicyStatus.ENDORSEMENT,
+        "CANCELLED": PolicyStatus.CANCELLED,
+        "EXPIRED": PolicyStatus.EXPIRED,
+    }
+    status = status_map.get(request.status)
+    if status is None:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {request.status}")
+
+    # Enqueue to outbox
+    outbox_id = _enqueue_to_outbox(
+        event_type=request.status,
+        contract="policy_registry",
+        method="updatePolicyStatus",
+        payload={
+            "policy_id": policy_id,
+            "new_status": request.status,
+        },
+    )
+
+    return {
+        "success": True,
+        "outbox_id": outbox_id,
+        "policy_id": policy_id,
+        "message": "Status update queued for blockchain",
+    }
+
+
+@app.post("/chain/premiums/record", response_model=dict[str, Any])
+async def api_record_premium(request: RecordEventRequest) -> dict[str, Any]:
+    """Record a premium payment event on the blockchain (via outbox)."""
+    signer_addr = gateway.signer_address
+    if not signer_addr:
+        raise HTTPException(status_code=500, detail="Signer not configured")
+    try:
+        signer_policy.enforce(signer_addr, PolicyAction.RECORD_EVENT)
+    except SignerPolicyError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+    # Enqueue to outbox
+    outbox_id = _enqueue_to_outbox(
+        event_type="RENEWAL",  # Premium payments treated as renewal events
+        contract="audit_event_registry",
+        method="recordEvent",
+        payload={
+            "policy_id": request.policy_id,
+            "commitment_hash": request.commitment_hash,
+        },
+    )
+
+    return {
+        "success": True,
+        "outbox_id": outbox_id,
+        "policy_id": request.policy_id,
+        "message": "Premium event queued for blockchain submission",
+    }
+
+
+@app.post("/chain/claims/record", response_model=dict[str, Any])
+async def api_record_claim(request: RecordEventRequest) -> dict[str, Any]:
+    """Record a claim event on the blockchain (via outbox)."""
+    signer_addr = gateway.signer_address
+    if not signer_addr:
+        raise HTTPException(status_code=500, detail="Signer not configured")
+    try:
+        signer_policy.enforce(signer_addr, PolicyAction.RECORD_EVENT)
+    except SignerPolicyError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+    # Enqueue to outbox
+    outbox_id = _enqueue_to_outbox(
+        event_type="CLAIM_FILING",
+        contract="audit_event_registry",
+        method="recordEvent",
+        payload={
+            "policy_id": request.policy_id,
+            "commitment_hash": request.commitment_hash,
+        },
+    )
+
+    return {
+        "success": True,
+        "outbox_id": outbox_id,
+        "policy_id": request.policy_id,
+        "message": "Claim event queued for blockchain submission",
+    }
+
+
+@app.post("/chain/reserves/attest", response_model=dict[str, Any])
+async def api_attest_reserves(request: RecordEventRequest) -> dict[str, Any]:
+    """Attest to reserve amounts on the blockchain (via outbox)."""
+    signer_addr = gateway.signer_address
+    if not signer_addr:
+        raise HTTPException(status_code=500, detail="Signer not configured")
+    try:
+        signer_policy.enforce(signer_addr, PolicyAction.RECORD_EVENT)
+    except SignerPolicyError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+    # Enqueue to outbox
+    outbox_id = _enqueue_to_outbox(
+        event_type="CLAIM_SETTLEMENT",
+        contract="audit_event_registry",
+        method="recordEvent",
+        payload={
+            "policy_id": request.policy_id,
+            "commitment_hash": request.commitment_hash,
+        },
+    )
+
+    return {
+        "success": True,
+        "outbox_id": outbox_id,
+        "policy_id": request.policy_id,
+        "message": "Reserve attestation queued for blockchain submission",
+    }
+
+
+@app.get("/chain/transactions/{tx_hash}", response_model=dict[str, Any])
+async def api_get_transaction(tx_hash: str) -> dict[str, Any]:
+    """Get a transaction receipt from the blockchain."""
+    try:
+        receipt = gateway.w3.eth.get_transaction_receipt(
+            gateway.w3.to_checksum_address("0x" + tx_hash[2:] if tx_hash.startswith("0x") else tx_hash)
+        )
+        if receipt is None:
+            raise HTTPException(status_code=404, detail=f"Transaction {tx_hash} not found")
+        return {
+            "tx_hash": tx_hash,
+            "block_number": receipt.blockNumber,
+            "status": "confirmed" if receipt.status == 1 else "failed",
+            "gas_used": receipt.gasUsed,
+            "logs": len(receipt.logs),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/policies/{policy_id}", response_model=PolicyResponse)
 async def api_get_policy(policy_id: str) -> dict[str, Any]:
     """Get a policy record from the blockchain."""
     try:
@@ -281,7 +443,7 @@ async def api_get_policy(policy_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.get("/policies/{policy_id}/status")
+@app.get("/policies/{policy_id}/status", response_model=dict[str, Any])
 async def api_get_policy_status(policy_id: str) -> dict[str, Any]:
     """Get a policy's status from the blockchain."""
     try:
@@ -291,7 +453,7 @@ async def api_get_policy_status(policy_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.get("/policies/{policy_id}/events")
+@app.get("/policies/{policy_id}/events", response_model=list[dict[str, Any]])
 async def api_get_policy_events(policy_id: str) -> list[dict[str, Any]]:
     """Get on-chain audit events for a policy."""
     try:
@@ -312,7 +474,7 @@ async def api_get_policy_events(policy_id: str) -> list[dict[str, Any]]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/events/by-type/{event_type}")
+@app.get("/events/by-type/{event_type}", response_model=list[dict[str, Any]])
 async def api_get_events_by_type(event_type: str) -> list[dict[str, Any]]:
     """Get on-chain audit events by event type."""
     try:
@@ -333,36 +495,38 @@ async def api_get_events_by_type(event_type: str) -> list[dict[str, Any]]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/outbox/stats")
+@app.get("/outbox/stats", response_model=OutboxStatsResponse)
 async def api_outbox_stats() -> dict[str, Any]:
     """Get outbox statistics."""
     stats = outbox_store.get_stats()
     return OutboxStatsResponse(**stats).model_dump()
 
 
-@app.post("/reconcile")
+@app.post("/chain/reconcile", response_model=ReconciliationReportResponse)
 async def api_reconcile(window_hours: int = 24) -> dict[str, Any]:
     """Run reconciliation between local state and blockchain."""
-    global reconciler
     if reconciler is None:
         raise HTTPException(
             status_code=503,
-            detail="Reconciler not initialized. Set local_store in startup.",
+            detail="Reconciler not enabled. Set BLOCKCHAIN_GATEWAY_RECONCILIATION_ENABLED=true.",
         )
     report = reconciler.reconcile(window_hours=window_hours)
     return report.to_dict()
 
 
-@app.get("/health")
+@app.get("/health", response_model=dict[str, Any])
 async def health_check() -> dict[str, Any]:
     """Health check endpoint."""
     connected = gateway.is_connected()
     chain_id = gateway.get_chain_id() if connected else None
     outbox_stats = outbox_store.get_stats()
+    reconciler_ready = reconciler is not None
     return {
-        "status": "healthy" if connected else "degraded",
+        "status": "healthy" if connected and reconciler_ready else "degraded",
         "service": "blockchain-gateway",
         "connected": connected,
         "chain_id": chain_id,
         "outbox": outbox_stats,
+        "reconciler_enabled": reconciler_ready,
+        "signer_policy": signer_policy.policy.to_dict(),
     }
