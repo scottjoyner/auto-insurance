@@ -60,6 +60,15 @@ services:
     depends_on:
       - ganache
 
+  auth-service:
+    build:
+      context: ../services/auth-service
+      dockerfile: Dockerfile
+    ports:
+      - "8005:8005"
+    environment:
+      - AUTH_SERVICE_AUTH_SERVICE_SECRET_KEY=supersecret
+
   web-ui:
     build:
       context: ../packages/web-ui
@@ -69,6 +78,26 @@ services:
     depends_on:
       - quote-service
       - blockchain-gateway
+      - auth-service
+
+  blockchain-ui:
+    build:
+      context: ../packages/blockchain-ui
+      dockerfile: Dockerfile
+    ports:
+      - "3001:80"
+    depends_on:
+      - blockchain-gateway
+
+  ops-portal:
+    build:
+      context: ../packages/ops-portal
+      dockerfile: Dockerfile
+    ports:
+      - "3002:80"
+    depends_on:
+      - policy-service
+      - quote-service
 
 volumes:
   pgdata:

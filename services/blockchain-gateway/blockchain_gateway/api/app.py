@@ -16,6 +16,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from blockchain_gateway.config.settings import settings
@@ -40,6 +41,13 @@ app = FastAPI(
     title="Blockchain Gateway",
     version="0.1.0",
     description="Wraps PolicyRegistry and AuditEventRegistry contracts with outbox pattern.",
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Initialize components

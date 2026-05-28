@@ -8,8 +8,10 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from quote_service.config.settings import settings
 from quote_service.engine.explainability import QuoteExplainability
 from quote_service.engine.quote_engine import QuoteEngine
 
@@ -21,8 +23,22 @@ app = FastAPI(
     version="0.1.0",
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Global engine instance - would be configured via settings in production
 _engine: QuoteEngine | None = None
+
+
+@app.on_event("startup")
+def startup_event():
+    if _engine is None:
+        init_engine(settings.default_product_yaml)
 
 
 def get_engine() -> QuoteEngine:

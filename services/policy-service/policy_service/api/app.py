@@ -8,6 +8,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from policy_service.config.settings import settings
@@ -29,6 +30,13 @@ from policy_service.storage.policy_store import store
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Policy Service", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 engine = PolicyEngine()
 
 
