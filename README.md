@@ -3,8 +3,8 @@
 ## Status
 
 **Phase**: Architecture Foundation (Phase 0)
-**Version**: 2026.05.26
-**Last Updated**: 2026-05-26
+**Version**: 2026.05.27
+**Last Updated**: 2026-05-27
 
 ## What This Is
 
@@ -122,15 +122,24 @@ See docs/03_execution_plan.md for the detailed 8-milestone plan.
 - Product strategy updated
 - Infrastructure defined
 
-### Milestone 2: Quote Service MVP
-- Quote service with deterministic rating
+### Milestone 2: Quote Service MVP (COMPLETED 2026-05-27)
+- Quote service with deterministic rating engine
 - Integration with rating DSL evaluator
 - Integration with risk appetite evaluation
+- Explainability reports (JSON + text)
+- Quote expiration handler
+- In-memory quote store
+- FastAPI application with full CRUD
+- Comprehensive test suite
 
-### Milestone 3: Risk Appetite Service MVP
+### Milestone 3: Risk Appetite Service MVP (COMPLETED 2026-05-27)
 - YAML policy loader
 - Risk evaluation endpoint
 - Exposure summary endpoint
+- Capital/reserve impact estimation
+- Reinsurance capacity checks
+- Dynamic policy updates
+- Comprehensive test suite
 
 ### Milestone 4: Policy Service MVP
 - Bind flow with audit packet

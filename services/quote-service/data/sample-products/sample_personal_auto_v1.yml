@@ -1,0 +1,191 @@
+# Sample Personal Auto Insurance Product v1
+# This is a simplified product definition for testing the rating-dsl engine.
+
+product: sample_personal_auto_v1
+version: "1.0"
+jurisdiction: SAMPLE
+effective_date: "2026-01-01"
+expiration_date: "2027-01-01"
+
+# Product metadata
+metadata:
+  name: "Sample Personal Auto Insurance"
+  description: "Simplified personal auto insurance product for testing"
+  carrier: "Sample Insurance Co."
+  line_of_business: "personal_auto"
+
+# Eligibility rules
+eligibility:
+  min_age: 16
+  max_age: 85
+  max_claims_3yr: 3
+  max_duis: 1
+  required_license_type:
+    - valid
+    - active
+  excluded_states: []
+  excluded_drivers: []
+
+# Rating rules
+rating:
+  base_premium: 1200.0
+
+  # Vehicle age factor
+  vehicle_age:
+    ranges:
+      - { min: 0, max: 3, factor: 1.1 }
+      - { min: 4, max: 7, factor: 1.0 }
+      - { min: 8, max: 12, factor: 0.9 }
+      - { min: 13, max: 99, factor: 0.8 }
+
+  # Driver age factor
+  driver_age:
+    ranges:
+      - { min: 16, max: 21, factor: 1.5 }
+      - { min: 22, max: 25, factor: 1.3 }
+      - { min: 26, max: 65, factor: 1.0 }
+      - { min: 66, max: 85, factor: 1.1 }
+
+  # Claims history factor
+  claims_history:
+    ranges:
+      - { max_claims: 0, factor: 0.85 }
+      - { max_claims: 1, factor: 1.0 }
+      - { max_claims: 2, factor: 1.25 }
+      - { max_claims: 3, factor: 1.5 }
+
+  # DUI factor
+  dui_factor:
+    has_dui: 1.4
+
+  # Credit score factor (simplified)
+  credit_score:
+    ranges:
+      - { min: 750, max: 999, factor: 0.85 }
+      - { min: 650, max: 749, factor: 1.0 }
+      - { min: 550, max: 649, factor: 1.15 }
+      - { min: 300, max: 549, factor: 1.35 }
+
+# Coverage options
+coverages:
+  liability:
+    name: "Bodily Injury & Property Damage Liability"
+    default_limit: 50000
+    available_limits:
+      - 25000
+      - 50000
+      - 100000
+      - 250000
+      - 500000
+    base_premium: 500.0
+    per_limit_increment: 50.0
+
+  collision:
+    name: "Collision Coverage"
+    default_deductible: 500
+    available_deductibles:
+      - 250
+      - 500
+      - 1000
+      - 2000
+    base_premium: 400.0
+    per_deductible_reduction: 50.0
+
+  comprehensive:
+    name: "Comprehensive Coverage"
+    default_deductible: 500
+    available_deductibles:
+      - 250
+      - 500
+      - 1000
+      - 2000
+    base_premium: 200.0
+    per_deductible_reduction: 30.0
+
+  uninsured_motorist:
+    name: "Uninsured/Underinsured Motorist"
+    default_limit: 50000
+    available_limits:
+      - 25000
+      - 50000
+      - 100000
+      - 250000
+    base_premium: 150.0
+    per_limit_increment: 25.0
+
+  medical_payments:
+    name: "Medical Payments"
+    default_limit: 5000
+    available_limits:
+      - 1000
+      - 2500
+      - 5000
+      - 10000
+    base_premium: 50.0
+    per_limit_increment: 5.0
+
+# Discounts
+discounts:
+  clean_driver:
+    name: "Clean Driver Discount"
+    description: "No claims in 3 years"
+    max_discount_pct: 15.0
+    conditions:
+      max_claims_3yr: 0
+
+  multi_policy:
+    name: "Multi-Policy Discount"
+    description: "Bundle with home/renters insurance"
+    max_discount_pct: 10.0
+    conditions:
+      has_other_policy: true
+
+  paperless:
+    name: "Paperless Discount"
+    description: "Electronic documents"
+    max_discount_pct: 3.0
+    conditions:
+      paperless: true
+
+  autopay:
+    name: "Automatic Payment Discount"
+    description: "Automatic bank draft"
+    max_discount_pct: 5.0
+    conditions:
+      autopay: true
+
+# Surcharges
+surcharges:
+  young_driver:
+    name: "Young Driver Surcharge"
+    description: "Driver under 25"
+    min_age: 16
+    max_age: 25
+    surcharge_pct: 25.0
+
+  old_driver:
+    name: "Senior Driver Surcharge"
+    description: "Driver over 70"
+    min_age: 70
+    max_age: 85
+    surcharge_pct: 10.0
+
+  high_risk_vehicle:
+    name: "High-Risk Vehicle Surcharge"
+    description: "Vehicle model with high theft/repair costs"
+    conditions:
+      high_theft_rate: true
+    surcharge_pct: 15.0
+
+# Risk appetite integration
+risk_appetite:
+  max_young_driver_pct: 10.0
+  max_senior_driver_pct: 5.0
+  max_high_claims_pct: 15.0
+  min_credit_score: 550
+  max_duis_allowed: 1
+
+# Expiration
+expiration:
+  quote_validity_days: 30
+  bind_deadline_days: 60

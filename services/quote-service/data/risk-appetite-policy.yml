@@ -1,0 +1,50 @@
+# Risk Appetite Policy for Quote Service Integration
+# This policy is used by the quote service to check risk appetite before generating quotes.
+
+version: "1.0"
+effective_date: "2026-01-01"
+
+categories:
+  driver_age:
+    name: "driver_age"
+    threshold_pct: 25.0
+    warning_pct: 18.0
+    action_on_threshold: "REFER"
+    description: "Maximum young driver concentration"
+    priority: 4
+  claim_severity:
+    name: "claim_severity"
+    threshold_pct: 15.0
+    warning_pct: 10.0
+    action_on_threshold: "REFER"
+    description: "Maximum high-claim-risk concentration"
+    priority: 5
+  vehicle_type:
+    name: "vehicle_type"
+    threshold_pct: 20.0
+    warning_pct: 15.0
+    action_on_threshold: "REFER"
+    description: "Maximum high-risk vehicle concentration"
+    priority: 6
+
+capital_requirements:
+  min_capital_ratio: 0.05
+
+reinsurance:
+  retention_pct: 30.0
+  total_capacity: 50000000.0
+  current_utilization: 0.6
+
+decision_matrix:
+  low:
+    max_score: 30
+    decision: "ACCEPT"
+  medium:
+    max_score: 60
+    decision: "ACCEPT_WITH_LIMITS"
+  high:
+    max_score: 80
+    decision: "REFER"
+  critical:
+    max_score: 100
+    decision: "DECLINE"

@@ -1,0 +1,77 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "/home/scott/git/auto-insurance/packages/blockchain-gateway/contracts/AuditEventRegistry.sol": {
+      "lastModificationDate": 1779927833483,
+      "contentHash": "e29f154dc654e243356623afde0da9c8",
+      "sourceName": "contracts/AuditEventRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "AuditEventRegistry"
+      ]
+    },
+    "/home/scott/git/auto-insurance/packages/blockchain-gateway/contracts/PolicyRegistry.sol": {
+      "lastModificationDate": 1779929442913,
+      "contentHash": "fc1a6da97f0fd4de8fe46fc8f8ea5a2f",
+      "sourceName": "contracts/PolicyRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "PolicyRegistry"
+      ]
+    }
+  }
+}

@@ -1,0 +1,106 @@
+# Risk Appetite Policy v1
+# Defines the risk appetite rules for the auto-insurance system.
+
+version: "1.0"
+effective_date: "2026-01-01"
+expiration_date: "2027-01-01"
+
+# Risk category rules
+categories:
+  agency:
+    name: "agency_concentration"
+    threshold_pct: 10.0
+    warning_pct: 7.0
+    action_on_threshold: "REFER"
+    description: "Maximum concentration by agency"
+    priority: 1
+
+  jurisdiction:
+    name: "geographic_concentration"
+    threshold_pct: 15.0
+    warning_pct: 10.0
+    action_on_threshold: "REFER"
+    description: "Maximum concentration by jurisdiction"
+    priority: 2
+
+  product:
+    name: "line_of_business"
+    threshold_pct: 20.0
+    warning_pct: 15.0
+    action_on_threshold: "REFER"
+    description: "Maximum concentration by product"
+    priority: 3
+
+  driver_age:
+    name: "driver_age_concentration"
+    threshold_pct: 25.0
+    warning_pct: 18.0
+    action_on_threshold: "REFER"
+    description: "Maximum concentration of young drivers (16-25)"
+    priority: 4
+
+  claim_severity:
+    name: "claim_severity_concentration"
+    threshold_pct: 15.0
+    warning_pct: 10.0
+    action_on_threshold: "REFER"
+    description: "Maximum concentration of high-claim-risk drivers"
+    priority: 5
+
+  vehicle_type:
+    name: "vehicle_type_concentration"
+    threshold_pct: 20.0
+    warning_pct: 15.0
+    action_on_threshold: "REFER"
+    description: "Maximum concentration of high-risk vehicle types"
+    priority: 6
+
+# Capital requirements
+capital_requirements:
+  min_capital_ratio: 0.05
+  target_capital_ratio: 0.10
+  max_single_line_exposure: 5000000.0
+  stress_test_scenarios:
+    - name: "severe_weather"
+      loss_pct: 0.15
+    - name: "economic_downturn"
+      loss_pct: 0.10
+    - name: "regulatory_change"
+      loss_pct: 0.05
+
+# Reinsurance configuration
+reinsurance:
+  retention_pct: 30.0
+  total_capacity: 50000000.0
+  current_utilization: 0.6
+  max_utilization: 0.95
+  required_retention_min: 20.0
+  required_retention_max: 50.0
+
+# Decision matrix
+decision_matrix:
+  low:
+    max_score: 30
+    decision: "ACCEPT"
+    description: "Low risk - accept without conditions"
+  medium:
+    max_score: 60
+    decision: "ACCEPT_WITH_LIMITS"
+    description: "Medium risk - accept with conditions"
+  high:
+    max_score: 80
+    decision: "REFER"
+    description: "High risk - refer to underwriter"
+  critical:
+    max_score: 100
+    decision: "DECLINE"
+    description: "Critical risk - decline"
+
+# Risk score weights
+risk_weights:
+  driver_age: 0.25
+  claim_severity: 0.25
+  vehicle_type: 0.15
+  agency_concentration: 0.10
+  geographic_concentration: 0.10
+  line_of_business: 0.15

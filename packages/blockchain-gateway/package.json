@@ -1,0 +1,24 @@
+{
+  "name": "blockchain-gateway",
+  "version": "0.1.0",
+  "description": "Blockchain Gateway - PolicyRegistry + AuditEventRegistry contracts, local Anvil deployment, policy commitment flow.",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:anvil": "hardhat run scripts/deploy-anvil.js --network anvil",
+    "deploy:local": "hardhat run scripts/deploy-local.js --network hardhat",
+    "lint": "solhint 'contracts/**/*.sol'",
+    "format": "prettier --write 'contracts/**/*.sol'"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.2.0",
+    "hardhat": "^2.22.0",
+    "solhint": "^5.0.0",
+    "prettier": "^3.3.0",
+    "prettier-plugin-solidity": "^1.3.0"
+  },
+  "dependencies": {
+    "ethers": "^6.13.0"
+  }
+}
