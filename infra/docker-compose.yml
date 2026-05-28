@@ -1,0 +1,74 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: auto_insurance
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  ganache:
+    image: trufflesuite/ganache-cli:latest
+    command: ["--deterministic"]
+    ports:
+      - "8545:8545"
+
+  quote-service:
+    build:
+      context: ../services/quote-service
+      dockerfile: Dockerfile
+    env_file:
+      - ../services/quote-service/.env.example
+    ports:
+      - "8001:8001"
+    depends_on:
+      - postgres
+
+  policy-service:
+    build:
+      context: ../services/policy-service
+      dockerfile: Dockerfile
+    env_file:
+      - ../services/policy-service/.env.example
+    ports:
+      - "8002:8002"
+    depends_on:
+      - postgres
+
+  risk-appetite-service:
+    build:
+      context: ../services/risk-appetite-service
+      dockerfile: Dockerfile
+    env_file:
+      - ../services/risk-appetite-service/.env.example
+    ports:
+      - "8003:8003"
+
+  blockchain-gateway:
+    build:
+      context: ../services/blockchain-gateway
+      dockerfile: Dockerfile
+    env_file:
+      - ../services/blockchain-gateway/.env.example
+    ports:
+      - "8004:8004"
+    depends_on:
+      - ganache
+
+  web-ui:
+    build:
+      context: ../packages/web-ui
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - quote-service
+      - blockchain-gateway
+
+volumes:
+  pgdata:
