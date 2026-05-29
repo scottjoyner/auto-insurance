@@ -8,6 +8,7 @@ from uuid import UUID
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from insurance_observability import CorrelationIdMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -19,6 +20,7 @@ from policy_service.storage.orm import BindRequestRecord, PolicyRecord
 from policy_service.storage.policy_repository import PolicyRepository
 
 app = FastAPI(title="Policy Service", version="0.1.0")
+app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
