@@ -24,7 +24,33 @@ jobs:
           python -m pip install "pytest>=8.3" "fastapi>=0.115" "httpx>=0.28" "pydantic>=2.10" "pydantic-settings>=2.7" "pyyaml>=6.0" "sqlalchemy>=2.0" "PyJWT>=2.10" "alembic>=1.13"
 
       - name: Validate documentation metadata
-        run: python scripts/validate_docs.py
+        run: |
+          python scripts/validate_docs.py
+          python - <<'PY'
+          from pathlib import Path
+          docs = [
+              'docs/00_documentation_index.md',
+              'docs/07_employee_operating_manual.md',
+              'docs/08_claims_crm_operating_guide.md',
+              'docs/09_blockchain_security_review.md',
+              'docs/10_markdown_cleanup_register.md',
+          ]
+          fields = ['Owner:', 'Audience:', 'Last reviewed:', 'Status:']
+          failures = []
+          for rel in docs:
+              path = Path(rel)
+              if not path.exists():
+                  failures.append(f'{rel} not found')
+                  continue
+              head = path.read_text(encoding='utf-8', errors='ignore')[:1000]
+              for field in fields:
+                  if field not in head:
+                      failures.append(f'{rel} missing {field}')
+          if failures:
+              print('\n'.join(failures))
+              raise SystemExit(1)
+          print('Required documentation metadata validated.')
+          PY
 
       - name: Validate Alembic revision syntax
         run: |
