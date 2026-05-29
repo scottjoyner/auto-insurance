@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app/packages/security:/app/packages/observability:/app/services/claims-service
+ENV PYTHONPATH=/app/packages/security:/app/packages/observability:/app/packages/documents:/app/services/claims-service
 WORKDIR /app
 
 RUN apt-get update \
