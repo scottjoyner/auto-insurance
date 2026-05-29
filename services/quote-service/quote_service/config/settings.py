@@ -21,6 +21,10 @@ class QuoteServiceSettings(BaseSettings):
     allow_credentials: bool = False
     require_auth: bool = True
 
+    # Persistence
+    database_url: str = "sqlite:///./quote_service.db"
+    auto_create_schema: bool = True
+
     # Quote defaults
     default_validity_days: int = 30
     max_validity_days: int = 365
