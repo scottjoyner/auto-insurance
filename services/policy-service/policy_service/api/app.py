@@ -1,242 +1,203 @@
-"""Policy service API - FastAPI application for policy lifecycle management."""
+"""Policy service API for persisted bind workflow."""
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
+from insurance_security.fastapi import ActorContext, Role, require_roles
 from policy_service.config.settings import settings
-from policy_service.domain.models import (
-    ApprovalDecision,
-    ApprovalRequest,
-    ApprovalStatus,
-    BindMethod,
-    BindRequest,
-    BindRequestInput,
-    BindRequestOutput,
-    PolicyDocumentType,
-    PolicyResponse,
-    PolicyState,
-)
-from policy_service.engine.policy_engine import PolicyEngine
-from policy_service.storage.policy_store import store
-
-logger = logging.getLogger(__name__)
+from policy_service.storage.database import create_schema, get_session
+from policy_service.storage.policy_repository import PolicyRepository
 
 app = FastAPI(title="Policy Service", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.allowed_origins,
+    allow_credentials=settings.allow_credentials,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
-engine = PolicyEngine()
 
 
-# ---------------------------------------------------------------------------
-# API models
-# ---------------------------------------------------------------------------
+@app.on_event("startup")
+def startup_event():
+    if settings.auto_create_schema:
+        create_schema()
+
+
+def get_repository(session: Session = Depends(get_session)) -> PolicyRepository:
+    return PolicyRepository(session)
+
+
+bind_actor = require_roles(Role.AGENT, Role.UNDERWRITER_L1, Role.UNDERWRITER_L2)
+approval_actor = require_roles(Role.UNDERWRITER_L1, Role.UNDERWRITER_L2)
+read_actor = require_roles(Role.AGENT, Role.UNDERWRITER_L1, Role.UNDERWRITER_L2)
 
 
 class BindRequestInputAPI(BaseModel):
-    """API input for bind request."""
     quote_id: UUID
     effective_date: datetime
     expiration_date: datetime
-    bind_method: BindMethod = BindMethod.HUMAN_APPROVAL
-    ai_confidence: float = 0.0
+    quote_snapshot: dict[str, Any] = Field(default_factory=dict)
+    risk_assessment_snapshot: dict[str, Any] = Field(default_factory=dict)
+    bind_method: str = "human_approval"
 
 
 class ApprovalDecisionAPI(BaseModel):
-    """API input for approval decision."""
     approval_status: str
-    approver: str
     comments: str = ""
 
 
-class PolicyQuery(BaseModel):
-    """API input for policy query."""
-    state: PolicyState | None = None
+class BindRequestResponse(BaseModel):
+    bind_request_id: str
+    quote_id: str
+    policy_id: str
+    status: str
+    total_premium: float
+    effective_date: str
+    expiration_date: str
 
 
-# ---------------------------------------------------------------------------
-# API endpoints
-# ---------------------------------------------------------------------------
+class PolicyResponse(BaseModel):
+    policy_id: str
+    quote_id: str
+    bind_request_id: str
+    state: str
+    total_premium: float
+    effective_date: str
+    expiration_date: str
+    bound_by_actor_id: str
+    bound_at: str
 
 
-@app.post("/policies/bind", response_model=BindRequestOutput)
-async def create_bind_request(input_data: BindRequestInputAPI) -> BindRequestOutput:
-    """Create a bind request from a quote."""
-    # Get quote data (in MVP, we simulate this)
-    quote_data = {
-        "policy_holder_name": "John Doe",
-        "policy_holder_address": "123 Main St, Sample, NC",
-        "policy_holder_phone": "555-1234",
-        "policy_holder_email": "john@example.com",
-        "driver_license": "DL123456",
-        "date_of_birth": "1990-01-01",
-        "vehicle_make": "Toyota",
-        "vehicle_model": "Camry",
-        "vehicle_year": 2023,
-        "vehicle_vin": "1HGBH41JXMN109186",
-        "license_plate": "ABC123",
-        "vehicle_state": "NC",
-        "vehicle_mileage": 15000,
-        "vehicle_primary_use": "commute",
-        "garage_location": "123 Main St, Sample, NC",
-        "coverages": [
-            {"type": "liability", "limit": 50000, "deductible": 500, "premium": 500.0},
-            {"type": "collision", "limit": 25000, "deductible": 500, "premium": 400.0},
-            {"type": "comprehensive", "limit": 25000, "deductible": 500, "premium": 200.0},
-        ],
-        "total_premium": 1100.0,
-    }
-
-    bind_request = engine.create_bind_request(input_data, quote_data)
-
-    # Create approval request
-    approval_request = engine.create_approval_request(bind_request, settings.approval_request_expiry_hours)
-
-    return BindRequestOutput(
-        bind_request=bind_request,
-        approval_request=approval_request,
-        message="Bind request created. Approval required.",
+def _bind_response(record) -> BindRequestResponse:
+    return BindRequestResponse(
+        bind_request_id=record.bind_request_id,
+        quote_id=record.quote_id,
+        policy_id=record.policy_id,
+        status=record.status,
+        total_premium=record.total_premium,
+        effective_date=record.effective_date.isoformat(),
+        expiration_date=record.expiration_date.isoformat(),
     )
 
 
-@app.post("/policies/{policy_id}/approve")
-async def approve_bind_request(
-    policy_id: UUID,
+def _policy_response(record) -> PolicyResponse:
+    return PolicyResponse(
+        policy_id=record.policy_id,
+        quote_id=record.quote_id,
+        bind_request_id=record.bind_request_id,
+        state=record.state,
+        total_premium=record.total_premium,
+        effective_date=record.effective_date.isoformat(),
+        expiration_date=record.expiration_date.isoformat(),
+        bound_by_actor_id=record.bound_by_actor_id,
+        bound_at=record.bound_at.isoformat(),
+    )
+
+
+@app.post("/bind-requests", response_model=BindRequestResponse)
+def create_bind_request(
+    input_data: BindRequestInputAPI,
+    actor: ActorContext = Depends(bind_actor),
+    repository: PolicyRepository = Depends(get_repository),
+) -> BindRequestResponse:
+    """Create a persisted bind request from an accepted quote snapshot."""
+    if input_data.expiration_date <= input_data.effective_date:
+        raise HTTPException(status_code=400, detail="expiration_date must be after effective_date")
+    record = repository.create_bind_request(
+        quote_id=input_data.quote_id,
+        effective_date=input_data.effective_date,
+        expiration_date=input_data.expiration_date,
+        quote_snapshot=input_data.quote_snapshot,
+        risk_assessment_snapshot=input_data.risk_assessment_snapshot,
+        actor_id=actor.actor_id,
+        bind_method=input_data.bind_method,
+    )
+    return _bind_response(record)
+
+
+@app.get("/bind-requests/{bind_request_id}", response_model=BindRequestResponse)
+def get_bind_request(
+    bind_request_id: UUID,
+    actor: ActorContext = Depends(read_actor),
+    repository: PolicyRepository = Depends(get_repository),
+) -> BindRequestResponse:
+    _ = actor
+    record = repository.get_bind_request(bind_request_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Bind request not found")
+    return _bind_response(record)
+
+
+@app.post("/bind-requests/{bind_request_id}/approve", response_model=PolicyResponse)
+def approve_bind_request(
+    bind_request_id: UUID,
     decision: ApprovalDecisionAPI,
-) -> dict[str, Any]:
-    """Process a human approval decision for a bind request."""
-    # Get the bind request from store (in MVP, we simulate this)
-    approval_request = ApprovalRequest(
-        bind_request=BindRequest(
-            quote_id=UUID("00000000-0000-0000-0000-000000000000"),
-            policy_id=policy_id,
-            policy_holder=None,  # type: ignore
-            vehicle=None,  # type: ignore
-            coverages=[],
-            total_premium=0.0,
-            effective_date=datetime.utcnow(),
-            expiration_date=datetime.utcnow(),
-            bind_method=BindMethod.HUMAN_APPROVAL,
-        ),
-        approval_status=ApprovalStatus.PENDING,
+    actor: ActorContext = Depends(approval_actor),
+    repository: PolicyRepository = Depends(get_repository),
+) -> PolicyResponse:
+    if decision.approval_status != "approved":
+        rejected = repository.reject_bind_request(bind_request_id, actor_id=actor.actor_id, comments=decision.comments)
+        if rejected is None:
+            raise HTTPException(status_code=404, detail="Bind request not found")
+        raise HTTPException(status_code=409, detail="Bind request rejected")
+    policy = repository.approve_bind_request(bind_request_id, actor_id=actor.actor_id, comments=decision.comments)
+    if policy is None:
+        raise HTTPException(status_code=404, detail="Bind request not found or not approvable")
+    return _policy_response(policy)
+
+
+@app.post("/policies/bind", response_model=BindRequestResponse)
+def compatibility_create_bind_request(
+    input_data: BindRequestInputAPI,
+    actor: ActorContext = Depends(bind_actor),
+    repository: PolicyRepository = Depends(get_repository),
+) -> BindRequestResponse:
+    """Compatibility endpoint for earlier docs; delegates to bind request creation."""
+    record = repository.create_bind_request(
+        quote_id=input_data.quote_id,
+        effective_date=input_data.effective_date,
+        expiration_date=input_data.expiration_date,
+        quote_snapshot=input_data.quote_snapshot,
+        risk_assessment_snapshot=input_data.risk_assessment_snapshot,
+        actor_id=actor.actor_id,
+        bind_method=input_data.bind_method,
     )
-
-    approval_decision = ApprovalDecision(
-        approval_status=decision.approval_status,
-        approver=decision.approver,
-        comments=decision.comments,
-    )
-
-    result = engine.process_approval(approval_request, approval_decision)
-
-    if result["success"] and decision.approval_status == "approved":
-        # Create policy in store
-        policy = store.create_policy(
-            policy_id=policy_id,
-            state=PolicyState.ACTIVE,
-            policy_holder=approval_request.bind_request.policy_holder,
-            vehicle=approval_request.bind_request.vehicle,
-            coverages=approval_request.bind_request.coverages,
-            total_premium=approval_request.bind_request.total_premium,
-            effective_date=approval_request.bind_request.effective_date,
-            expiration_date=approval_request.bind_request.expiration_date,
-        )
-        return {"success": True, "message": "Policy bound successfully", "policy": policy}
-
-    return result
+    return _bind_response(record)
 
 
-@app.post("/policies/{policy_id}/transition")
-async def transition_policy_state(
+@app.get("/policies/{policy_id}", response_model=PolicyResponse)
+def get_policy(
     policy_id: UUID,
-    target_state: str,
-) -> dict[str, Any]:
-    """Transition a policy to a new state."""
-    current_policy = store.get_policy(policy_id)
-    if not current_policy:
+    actor: ActorContext = Depends(read_actor),
+    repository: PolicyRepository = Depends(get_repository),
+) -> PolicyResponse:
+    _ = actor
+    policy = repository.get_policy(policy_id)
+    if policy is None:
         raise HTTPException(status_code=404, detail="Policy not found")
-
-    current_state = PolicyState(current_policy["state"])
-    target = PolicyState(target_state)
-
-    result = engine.transition_state(current_state, target, policy_id)
-
-    if result["success"]:
-        store.update_policy_state(policy_id, target)
-        if result["audit_packet"]:
-            store.add_audit_packet(policy_id, result["audit_packet"])
-        return {"success": True, "new_state": target, "audit_packet": result["audit_packet"]}
-
-    raise HTTPException(status_code=400, detail=result.get("message", "Transition failed"))
+    return _policy_response(policy)
 
 
-@app.get("/policies/{policy_id}")
-async def get_policy(policy_id: UUID) -> dict[str, Any]:
-    """Get a policy by ID."""
-    policy = store.get_policy(policy_id)
-    if not policy:
-        raise HTTPException(status_code=404, detail="Policy not found")
-
-    packets = store.get_audit_packets(policy_id)
-    documents = store.get_documents(policy_id)
-
-    return {
-        **policy,
-        "audit_packets": [p.to_dict() for p in packets],
-        "documents": documents,
-    }
-
-
-@app.get("/policies")
-async def list_policies(state: PolicyState | None = None) -> list[dict[str, Any]]:
-    """List policies, optionally filtered by state."""
-    return store.list_policies(state)
-
-
-@app.post("/policies/{policy_id}/documents")
-async def add_policy_document(
-    policy_id: UUID,
-    doc_type: PolicyDocumentType,
-    content: str,
-    metadata: dict[str, Any] = {},
-) -> dict[str, Any]:
-    """Add a policy document."""
-    policy = store.get_policy(policy_id)
-    if not policy:
-        raise HTTPException(status_code=404, detail="Policy not found")
-
-    doc = store.add_document(
-        policy_id=policy_id,
-        doc_type=doc_type,
-        content=content,
-        metadata=metadata,
-    )
-    return doc
-
-
-@app.get("/policies/{policy_id}/documents")
-async def get_policy_documents(policy_id: UUID) -> list[dict[str, Any]]:
-    """Get all documents for a policy."""
-    policy = store.get_policy(policy_id)
-    if not policy:
-        raise HTTPException(status_code=404, detail="Policy not found")
-
-    return store.get_documents(policy_id)
+@app.get("/policies", response_model=list[PolicyResponse])
+def list_policies(
+    state: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    actor: ActorContext = Depends(read_actor),
+    repository: PolicyRepository = Depends(get_repository),
+) -> list[PolicyResponse]:
+    _ = actor
+    return [_policy_response(policy) for policy in repository.list_policies(state=state, limit=limit)]
 
 
 @app.get("/health")
-async def health_check() -> dict[str, str]:
-    """Health check endpoint."""
-    return {"status": "healthy", "service": "policy-service"}
+def health_check() -> dict[str, str]:
+    return {"status": "healthy", "service": "policy-service", "persistence": "sqlalchemy"}
