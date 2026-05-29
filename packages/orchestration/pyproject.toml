@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "insurance-orchestration"
+version = "0.1.0"
+description = "Service orchestration helpers for quote, risk, and policy workflows"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.28",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["insurance_orchestration"]
