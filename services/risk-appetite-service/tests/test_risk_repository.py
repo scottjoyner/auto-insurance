@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -8,7 +9,7 @@ from risk_appetite_service.domain.models import RiskAppetitePolicy
 from risk_appetite_service.engine.risk_engine import RiskAppetiteEngine
 from risk_appetite_service.storage.database import Base
 from risk_appetite_service.storage.orm import RiskAssessmentRecord, RiskPolicyApprovalRecord, RiskPolicyVersionRecord
-from risk_appetite_service.storage.risk_repository import RiskRepository
+from risk_appetite_service.storage.risk_repository import RiskPolicyLifecycleError, RiskRepository
 
 
 def _session():
@@ -58,6 +59,21 @@ def test_policy_lifecycle_records_approval_actions():
     assert repository.get_active_policy_record().id == draft.id
     assert session.query(RiskPolicyVersionRecord).count() == 1
     assert session.query(RiskPolicyApprovalRecord).count() == 3
+
+
+def test_invalid_policy_lifecycle_transitions_raise():
+    session = _session()
+    repository = RiskRepository(session)
+    draft = repository.create_policy_draft(_policy(), actor_id="uw-1")
+
+    with pytest.raises(RiskPolicyLifecycleError):
+        repository.approve_policy(draft.id, actor_id="uw-2")
+
+    submitted = repository.submit_policy(draft.id, actor_id="uw-1")
+    assert submitted is not None
+
+    with pytest.raises(RiskPolicyLifecycleError):
+        repository.activate_policy(draft.id, actor_id="uw-2")
 
 
 def test_save_assessment_records_policy_version():
