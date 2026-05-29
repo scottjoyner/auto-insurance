@@ -16,7 +16,7 @@ from risk_appetite_service.config.settings import settings
 from risk_appetite_service.domain.models import RiskAppetitePolicy
 from risk_appetite_service.engine.risk_engine import RiskAppetiteEngine
 from risk_appetite_service.storage.database import create_schema, get_session
-from risk_appetite_service.storage.risk_repository import RiskRepository
+from risk_appetite_service.storage.risk_repository import RiskPolicyLifecycleError, RiskRepository
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +107,16 @@ def _policy_response(record) -> PolicyLifecycleResponse:
     )
 
 
+def _lifecycle_call(fn, not_found_message: str):
+    try:
+        record = fn()
+    except RiskPolicyLifecycleError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if record is None:
+        raise HTTPException(status_code=404, detail=not_found_message)
+    return record
+
+
 @app.post("/assess", response_model=RiskAssessmentResponse)
 def assess_risk(
     req: RiskAssessmentRequest,
@@ -156,9 +166,10 @@ def submit_policy(
     actor: ActorContext = Depends(policy_admin_actor),
     repository: RiskRepository = Depends(get_repository),
 ):
-    record = repository.submit_policy(policy_id, actor_id=actor.actor_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail="Policy version not found")
+    record = _lifecycle_call(
+        lambda: repository.submit_policy(policy_id, actor_id=actor.actor_id),
+        "Policy version not found",
+    )
     return _policy_response(record)
 
 
@@ -168,9 +179,10 @@ def approve_policy(
     actor: ActorContext = Depends(policy_admin_actor),
     repository: RiskRepository = Depends(get_repository),
 ):
-    record = repository.approve_policy(policy_id, actor_id=actor.actor_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail="Policy version not found")
+    record = _lifecycle_call(
+        lambda: repository.approve_policy(policy_id, actor_id=actor.actor_id),
+        "Policy version not found",
+    )
     return _policy_response(record)
 
 
@@ -180,10 +192,10 @@ def activate_policy(
     actor: ActorContext = Depends(policy_admin_actor),
     repository: RiskRepository = Depends(get_repository),
 ):
-    global _engine, _policy
-    record = repository.activate_policy(policy_id, actor_id=actor.actor_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail="Policy version not found")
+    record = _lifecycle_call(
+        lambda: repository.activate_policy(policy_id, actor_id=actor.actor_id),
+        "Policy version not found",
+    )
     policy = RiskAppetitePolicy.from_dict(record.policy_data)
     init_engine(policy)
     return _policy_response(record)
