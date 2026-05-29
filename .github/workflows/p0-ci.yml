@@ -42,6 +42,11 @@ jobs:
           PYTHONPATH: packages/security
         run: pytest packages/security/tests
 
+      - name: Run orchestration tests
+        env:
+          PYTHONPATH: packages/orchestration
+        run: pytest packages/orchestration/tests
+
       - name: Run quote repository tests
         env:
           PYTHONPATH: services/quote-service:packages/rating-dsl:packages/security
