@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.10",
     "pydantic-settings>=2.7",
     "shared-types",
+    "insurance-security",
 ]
 
 [project.optional-dependencies]
