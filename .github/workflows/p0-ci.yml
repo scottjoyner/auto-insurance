@@ -45,5 +45,11 @@ jobs:
           RISK_APPETITE_DATABASE_URL: sqlite://
         run: pytest services/risk-appetite-service/tests/test_risk_repository.py
 
+      - name: Run policy repository tests
+        env:
+          PYTHONPATH: services/policy-service:packages/security
+          POLICY_SERVICE_DATABASE_URL: sqlite://
+        run: pytest services/policy-service/tests/test_policy_repository.py
+
       - name: Compose config validation
         run: docker compose config
