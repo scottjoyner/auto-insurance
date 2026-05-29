@@ -1,5 +1,10 @@
 # Documentation Index
 
+Owner: Platform Engineering  
+Audience: engineering, operations, compliance, product  
+Last reviewed: 2026-05-29  
+Status: active documentation index
+
 ## Purpose
 
 This file is the canonical entry point for repository documentation. Older markdown files may describe earlier architecture assumptions and should be treated as historical unless listed below as current.
