@@ -12,6 +12,7 @@ dependencies = [
     "uvicorn>=0.34",
     "pydantic>=2.10",
     "pydantic-settings>=2.7",
+    "sqlalchemy>=2.0",
     "rating-dsl",
     "shared-types",
     "insurance-security",
