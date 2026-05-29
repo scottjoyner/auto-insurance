@@ -111,6 +111,7 @@ class Quote:
             "expires_at": self.expires_at.isoformat(),
             "created_at": self.created_at.isoformat(),
             "rating_result_hash": self.rating_result_hash,
+            "input_snapshot_hash": self.input_snapshot_hash,
             "ai_confidence_score": self.ai_confidence_score,
         }
 
