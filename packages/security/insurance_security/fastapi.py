@@ -1,19 +1,4 @@
-"""FastAPI authentication and authorization helpers.
-
-This module intentionally implements a small development-time bearer-token
-contract. It is not a production identity provider. The contract gives every
-service a shared deny-by-default authorization layer while the platform is still
-in prototype mode.
-
-Accepted development tokens:
-- ``dev:<actor_id>:<ROLE>[,<ROLE>...]``
-- ``dev:<actor_id>:<ROLE>[,<ROLE>...]:<tenant_id>:<customer_id>``
-- ``system:<actor_id>``
-
-Production hardening work remains in P0/P1: JWT signature verification, key
-rotation, issuer/audience checks, tenant scoping, and centralized policy
-decision logging.
-"""
+"""FastAPI authentication and authorization helpers."""
 
 from __future__ import annotations
 
@@ -22,6 +7,8 @@ from enum import StrEnum
 from typing import Iterable
 
 from fastapi import Depends, Header, HTTPException, status
+
+from insurance_security.settings import get_security_settings
 
 
 class Role(StrEnum):
@@ -55,12 +42,6 @@ class ActorContext:
         return self.has_any_role({Role.SYSTEM, Role.ADMIN, Role.UNDERWRITER_L1, Role.UNDERWRITER_L2})
 
     def can_access_customer(self, customer_id: str | None, tenant_id: str | None = None) -> bool:
-        """Return whether actor can access a customer-owned resource.
-
-        Prototype rule: system/admin/underwriters can access all resources;
-        agents are tenant-scoped when tenant_id is provided; customers are
-        restricted to their own customer_id.
-        """
         if self.is_privileged():
             return True
         if tenant_id and self.tenant_id and self.tenant_id != tenant_id:
@@ -73,11 +54,7 @@ class ActorContext:
 
 
 def _parse_dev_token(token: str) -> ActorContext:
-    """Parse the prototype bearer-token contract.
-
-    This intentionally avoids accepting arbitrary opaque tokens. Unknown role
-    strings and malformed tokens fail closed.
-    """
+    """Parse the prototype bearer-token contract."""
 
     if token.startswith("system:"):
         _, actor_id = token.split(":", 1)
@@ -130,8 +107,15 @@ def get_actor_context(authorization: str | None = Header(default=None)) -> Actor
         )
 
     token = authorization[len(prefix) :].strip()
+    settings = get_security_settings()
     try:
-        return _parse_dev_token(token)
+        if settings.auth_mode == "jwt":
+            from insurance_security.jwt import validate_jwt_token
+
+            return validate_jwt_token(token, settings)
+        if settings.auth_mode == "dev" or settings.allow_dev_tokens:
+            return _parse_dev_token(token)
+        raise ValueError("development tokens disabled")
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -141,11 +125,7 @@ def get_actor_context(authorization: str | None = Header(default=None)) -> Actor
 
 
 def require_roles(*allowed_roles: Role):
-    """FastAPI dependency factory that enforces role-based access.
-
-    ``SYSTEM`` and ``ADMIN`` are privileged roles and are accepted for every
-    protected endpoint. Health endpoints should not use this dependency.
-    """
+    """FastAPI dependency factory that enforces role-based access."""
 
     allowed = frozenset(allowed_roles)
     privileged = frozenset({Role.SYSTEM, Role.ADMIN})
