@@ -27,6 +27,10 @@ def health():
 client = TestClient(app)
 
 
+def _jwt(claims, secret="test-secret"):
+    return jwt.encode(claims, secret, algorithm="HS256")
+
+
 def test_health_is_public():
     response = client.get("/health")
     assert response.status_code == 200
@@ -61,7 +65,7 @@ def test_jwt_auth_mode_validates_signed_token(monkeypatch):
     monkeypatch.setenv("INSURANCE_JWT_HS256_SECRET", "test-secret")
     monkeypatch.setenv("INSURANCE_JWT_ISSUER", "auto-insurance-test")
     monkeypatch.setenv("INSURANCE_JWT_AUDIENCE", "auto-insurance-api")
-    token = jwt.encode(
+    token = _jwt(
         {
             "sub": "agent-1",
             "roles": ["AGENT"],
@@ -69,9 +73,7 @@ def test_jwt_auth_mode_validates_signed_token(monkeypatch):
             "customer_id": "customer-1",
             "iss": "auto-insurance-test",
             "aud": "auto-insurance-api",
-        },
-        "test-secret",
-        algorithm="HS256",
+        }
     )
     response = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
@@ -84,6 +86,40 @@ def test_jwt_auth_mode_validates_signed_token(monkeypatch):
 def test_jwt_auth_mode_rejects_bad_signature(monkeypatch):
     monkeypatch.setenv("INSURANCE_AUTH_MODE", "jwt")
     monkeypatch.setenv("INSURANCE_JWT_HS256_SECRET", "test-secret")
-    token = jwt.encode({"sub": "agent-1", "roles": ["AGENT"]}, "wrong-secret", algorithm="HS256")
+    token = _jwt({"sub": "agent-1", "roles": ["AGENT"]}, secret="wrong-secret")
     response = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+
+
+def test_jwt_auth_mode_rejects_wrong_issuer(monkeypatch):
+    monkeypatch.setenv("INSURANCE_AUTH_MODE", "jwt")
+    monkeypatch.setenv("INSURANCE_JWT_HS256_SECRET", "test-secret")
+    monkeypatch.setenv("INSURANCE_JWT_ISSUER", "expected-issuer")
+    token = _jwt({"sub": "agent-1", "roles": ["AGENT"], "iss": "wrong-issuer"})
+    response = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+
+
+def test_jwt_auth_mode_rejects_wrong_audience(monkeypatch):
+    monkeypatch.setenv("INSURANCE_AUTH_MODE", "jwt")
+    monkeypatch.setenv("INSURANCE_JWT_HS256_SECRET", "test-secret")
+    monkeypatch.setenv("INSURANCE_JWT_AUDIENCE", "expected-audience")
+    token = _jwt({"sub": "agent-1", "roles": ["AGENT"], "aud": "wrong-audience"})
+    response = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+
+
+def test_jwt_auth_mode_rejects_missing_roles(monkeypatch):
+    monkeypatch.setenv("INSURANCE_AUTH_MODE", "jwt")
+    monkeypatch.setenv("INSURANCE_JWT_HS256_SECRET", "test-secret")
+    token = _jwt({"sub": "agent-1"})
+    response = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+
+
+def test_jwt_mode_rejects_dev_token_when_dev_tokens_disabled(monkeypatch):
+    monkeypatch.setenv("INSURANCE_AUTH_MODE", "jwt")
+    monkeypatch.setenv("INSURANCE_ALLOW_DEV_TOKENS", "false")
+    monkeypatch.setenv("INSURANCE_JWT_HS256_SECRET", "test-secret")
+    response = client.get("/protected", headers={"Authorization": "Bearer dev:user-1:AGENT"})
     assert response.status_code == 401
