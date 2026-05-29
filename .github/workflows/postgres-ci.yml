@@ -46,6 +46,15 @@ jobs:
               assert conn.execute(text('select 1')).scalar() == 1
           PY
 
+      - name: Apply quote SQL migrations against Postgres
+        run: python scripts/apply_sql_migrations_sqlalchemy.py --database-url postgresql+psycopg2://postgres:postgres@localhost:5432/auto_insurance_test --service quote --migrations services/quote-service/migrations
+
+      - name: Apply risk SQL migrations against Postgres
+        run: python scripts/apply_sql_migrations_sqlalchemy.py --database-url postgresql+psycopg2://postgres:postgres@localhost:5432/auto_insurance_test --service risk --migrations services/risk-appetite-service/migrations
+
+      - name: Apply policy SQL migrations against Postgres
+        run: python scripts/apply_sql_migrations_sqlalchemy.py --database-url postgresql+psycopg2://postgres:postgres@localhost:5432/auto_insurance_test --service policy --migrations services/policy-service/migrations
+
       - name: Run quote repository tests against Postgres
         env:
           PYTHONPATH: services/quote-service:packages/rating-dsl:packages/security
