@@ -55,6 +55,9 @@ jobs:
       - name: Apply policy SQL migrations against Postgres
         run: python scripts/apply_sql_migrations_sqlalchemy.py --database-url postgresql+psycopg2://postgres:postgres@localhost:5432/auto_insurance_test --service policy --migrations services/policy-service/migrations
 
+      - name: Apply claims SQL migrations against Postgres
+        run: python scripts/apply_sql_migrations_sqlalchemy.py --database-url postgresql+psycopg2://postgres:postgres@localhost:5432/auto_insurance_test --service claims --migrations services/claims-service/migrations
+
       - name: Run quote repository tests against Postgres
         env:
           PYTHONPATH: services/quote-service:packages/rating-dsl:packages/security:packages/observability
@@ -72,3 +75,9 @@ jobs:
           PYTHONPATH: services/policy-service:packages/security:packages/observability
           POLICY_SERVICE_DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/auto_insurance_test
         run: pytest services/policy-service/tests/test_policy_repository.py
+
+      - name: Run claims repository tests against Postgres
+        env:
+          PYTHONPATH: services/claims-service:packages/security:packages/observability:packages/documents
+          CLAIMS_SERVICE_DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/auto_insurance_test
+        run: pytest services/claims-service/tests/test_claims_repository.py
