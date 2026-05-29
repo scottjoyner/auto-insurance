@@ -19,6 +19,10 @@ class RiskAppetiteSettings(BaseSettings):
     require_auth: bool = True
     enable_runtime_policy_update: bool = False
 
+    # Database
+    database_url: str = "sqlite:///./risk_appetite_service.db"
+    auto_create_schema: bool = True
+
     # Risk appetite policy
     policy_path: str = "data/risk-appetite-policy.yml"
 
