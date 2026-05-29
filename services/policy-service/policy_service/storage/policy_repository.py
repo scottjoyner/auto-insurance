@@ -25,12 +25,23 @@ class PolicyRepository:
         risk_assessment_snapshot: dict,
         actor_id: str,
         bind_method: str = "human_approval",
+        request_key: str | None = None,
     ) -> BindRequestRecord:
+        if request_key:
+            existing = (
+                self.session.query(BindRequestRecord)
+                .filter(BindRequestRecord.request_key == request_key)
+                .first()
+            )
+            if existing is not None:
+                return existing
+
         policy_id = str(uuid4())
         record = BindRequestRecord(
             bind_request_id=str(uuid4()),
             quote_id=str(quote_id),
             policy_id=policy_id,
+            request_key=request_key,
             status="pending_approval",
             bind_method=bind_method,
             total_premium=float(quote_snapshot.get("total_premium", 0.0)),
@@ -62,6 +73,9 @@ class PolicyRepository:
         bind_request = self.get_bind_request(bind_request_id)
         if bind_request is None:
             return None
+        existing_policy = self.get_policy(bind_request.policy_id)
+        if existing_policy is not None:
+            return existing_policy
         if bind_request.status not in {"pending_approval", "approved"}:
             return None
 
@@ -104,6 +118,8 @@ class PolicyRepository:
     def reject_bind_request(self, bind_request_id: UUID | str, actor_id: str, comments: str = "") -> BindRequestRecord | None:
         bind_request = self.get_bind_request(bind_request_id)
         if bind_request is None:
+            return None
+        if bind_request.status == "approved":
             return None
         approval = (
             self.session.query(ApprovalRecord)
