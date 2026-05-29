@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 
 from quote_service.domain.models import Quote, QuoteStatus
 from quote_service.storage.database import Base
-from quote_service.storage.orm import QuoteRecord
+from quote_service.storage.orm import QuoteEventRecord, QuoteRatingTraceRecord, QuoteStatusHistoryRecord, QuoteVersionRecord
 from quote_service.storage.quote_repository import QuoteRepository
 
 
@@ -51,6 +51,11 @@ def test_save_and_get_quote_round_trip():
     assert loaded.input_snapshot_hash == "input-hash"
     assert loaded._applicant_data["coverage_type"] == "standard"
 
+    assert session.query(QuoteVersionRecord).count() == 1
+    assert session.query(QuoteStatusHistoryRecord).count() == 1
+    assert session.query(QuoteRatingTraceRecord).count() == 1
+    assert session.query(QuoteEventRecord).count() == 1
+
 
 def test_list_filters_by_status():
     session = _session()
@@ -64,3 +69,27 @@ def test_list_filters_by_status():
     results = repository.list(status=QuoteStatus.QUOTED)
     assert len(results) == 1
     assert results[0].quote_id == quoted.quote_id
+
+
+def test_accept_creates_new_version_and_status_event():
+    session = _session()
+    repository = QuoteRepository(session)
+    quote = Quote(
+        product_id="sample_personal_auto_v1",
+        product_version="1.0",
+        jurisdiction="SAMPLE",
+        status=QuoteStatus.QUOTED,
+        total_premium=125.0,
+        bind_eligible=True,
+        expires_at=datetime.utcnow() + timedelta(days=30),
+    )
+    repository.save(quote, actor_id="agent-1")
+
+    accepted = repository.accept(quote.quote_id, actor_id="agent-1")
+
+    assert accepted is not None
+    assert accepted.status == QuoteStatus.CONVERTED
+    assert accepted.accepted_at is not None
+    assert session.query(QuoteVersionRecord).count() == 2
+    assert session.query(QuoteStatusHistoryRecord).count() == 2
+    assert session.query(QuoteEventRecord).count() == 2
