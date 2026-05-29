@@ -1,0 +1,37 @@
+name: P0 CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  p0-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "pytest>=8.3" "fastapi>=0.115" "httpx>=0.28" "pydantic>=2.10" "pydantic-settings>=2.7" "pyyaml>=6.0"
+
+      - name: Run rating DSL golden tests
+        env:
+          PYTHONPATH: packages/rating-dsl
+        run: pytest packages/rating-dsl/tests
+
+      - name: Run shared security tests
+        env:
+          PYTHONPATH: packages/security
+        run: pytest packages/security/tests
+
+      - name: Compose config validation
+        run: docker compose config
