@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app/packages/rating-dsl:/app/packages/security:/app/services/quote-service
+ENV PYTHONPATH=/app/packages/rating-dsl:/app/packages/security:/app/packages/observability:/app/services/quote-service
 WORKDIR /app
 
 RUN apt-get update \
