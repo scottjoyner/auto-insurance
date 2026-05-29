@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "insurance-security"
+version = "0.1.0"
+description = "Shared authentication and authorization helpers for the insurance operating system"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["insurance_security"]
