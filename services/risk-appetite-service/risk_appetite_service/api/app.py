@@ -9,11 +9,14 @@ from uuid import UUID
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from insurance_security.fastapi import ActorContext, Role, require_roles
 from risk_appetite_service.config.settings import settings
 from risk_appetite_service.domain.models import RiskAppetitePolicy
 from risk_appetite_service.engine.risk_engine import RiskAppetiteEngine
+from risk_appetite_service.storage.database import create_schema, get_session
+from risk_appetite_service.storage.risk_repository import RiskRepository
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +38,12 @@ _engine: RiskAppetiteEngine | None = None
 _policy: RiskAppetitePolicy | None = None
 
 
+@app.on_event("startup")
+def startup_event():
+    if settings.auto_create_schema:
+        create_schema()
+
+
 def get_engine() -> RiskAppetiteEngine:
     if _engine is None:
         raise RuntimeError("RiskAppetiteEngine not initialized.")
@@ -45,6 +54,10 @@ def init_engine(policy: RiskAppetitePolicy) -> None:
     global _engine, _policy
     _engine = RiskAppetiteEngine(policy)
     _policy = policy
+
+
+def get_repository(session: Session = Depends(get_session)) -> RiskRepository:
+    return RiskRepository(session)
 
 
 assess_actor = require_roles(Role.AGENT, Role.UNDERWRITER_L1, Role.UNDERWRITER_L2, Role.SYSTEM)
@@ -78,8 +91,28 @@ class PolicyUpdateRequest(BaseModel):
     policy_data: dict[str, Any] = Field(description="New policy configuration")
 
 
+class PolicyLifecycleResponse(BaseModel):
+    id: int
+    version: str
+    status: str
+    effective_date: str
+
+
+def _policy_response(record) -> PolicyLifecycleResponse:
+    return PolicyLifecycleResponse(
+        id=record.id,
+        version=record.version,
+        status=record.status,
+        effective_date=record.effective_date,
+    )
+
+
 @app.post("/assess", response_model=RiskAssessmentResponse)
-def assess_risk(req: RiskAssessmentRequest, actor: ActorContext = Depends(assess_actor)):
+def assess_risk(
+    req: RiskAssessmentRequest,
+    actor: ActorContext = Depends(assess_actor),
+    repository: RiskRepository = Depends(get_repository),
+):
     engine = get_engine()
     try:
         assessment = engine.assess(
@@ -91,8 +124,81 @@ def assess_risk(req: RiskAssessmentRequest, actor: ActorContext = Depends(assess
         logger.error("Risk assessment failed: %s", e)
         raise HTTPException(status_code=500, detail="Risk assessment failed") from e
 
+    policy_version = _policy.version if _policy else "unversioned"
+    repository.save_assessment(
+        assessment=assessment,
+        policy_version=policy_version,
+        quote_data=req.quote_data,
+        portfolio_state=req.portfolio_state,
+        actor_id=actor.actor_id,
+    )
     logger.info("Risk assessment completed actor=%s quote_id=%s", actor.actor_id, req.quote_id)
     return RiskAssessmentResponse(**assessment.to_dict())
+
+
+@app.post("/risk-policies/drafts", response_model=PolicyLifecycleResponse)
+def create_policy_draft(
+    req: PolicyUpdateRequest,
+    actor: ActorContext = Depends(policy_admin_actor),
+    repository: RiskRepository = Depends(get_repository),
+):
+    try:
+        policy = RiskAppetitePolicy.from_dict(req.policy_data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Invalid policy") from e
+    record = repository.create_policy_draft(policy, actor_id=actor.actor_id)
+    return _policy_response(record)
+
+
+@app.post("/risk-policies/{policy_id}/submit", response_model=PolicyLifecycleResponse)
+def submit_policy(
+    policy_id: int,
+    actor: ActorContext = Depends(policy_admin_actor),
+    repository: RiskRepository = Depends(get_repository),
+):
+    record = repository.submit_policy(policy_id, actor_id=actor.actor_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Policy version not found")
+    return _policy_response(record)
+
+
+@app.post("/risk-policies/{policy_id}/approve", response_model=PolicyLifecycleResponse)
+def approve_policy(
+    policy_id: int,
+    actor: ActorContext = Depends(policy_admin_actor),
+    repository: RiskRepository = Depends(get_repository),
+):
+    record = repository.approve_policy(policy_id, actor_id=actor.actor_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Policy version not found")
+    return _policy_response(record)
+
+
+@app.post("/risk-policies/{policy_id}/activate", response_model=PolicyLifecycleResponse)
+def activate_policy(
+    policy_id: int,
+    actor: ActorContext = Depends(policy_admin_actor),
+    repository: RiskRepository = Depends(get_repository),
+):
+    global _engine, _policy
+    record = repository.activate_policy(policy_id, actor_id=actor.actor_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Policy version not found")
+    policy = RiskAppetitePolicy.from_dict(record.policy_data)
+    init_engine(policy)
+    return _policy_response(record)
+
+
+@app.get("/risk-policies/active", response_model=PolicyLifecycleResponse)
+def get_active_policy_record(
+    actor: ActorContext = Depends(policy_actor),
+    repository: RiskRepository = Depends(get_repository),
+):
+    _ = actor
+    record = repository.get_active_policy_record()
+    if record is None:
+        raise HTTPException(status_code=404, detail="No active policy version")
+    return _policy_response(record)
 
 
 @app.post("/policy/update")
@@ -146,4 +252,5 @@ def health():
         "engine_initialized": _engine is not None,
         "auth_required": settings.require_auth,
         "runtime_policy_update_enabled": settings.enable_runtime_policy_update,
+        "persistence": "sqlalchemy",
     }
