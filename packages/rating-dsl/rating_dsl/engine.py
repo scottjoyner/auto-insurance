@@ -1,20 +1,4 @@
-"""
-Rating engine — executes the full rating pipeline for a product.
-
-Takes a RatingProduct configuration and a quote context (dict of variable
-values), runs the calculation pipeline in order, and returns a RatingResult
-with the computed premium for each coverage and the total.
-
-Pipeline steps (in order):
-1. apply_eligibility    — Check all eligibility gates; fail fast if any fail
-2. calculate_base       — Compute the base premium from base_rates
-3. apply_surcharges     — Apply all matching surcharges (in priority order)
-4. apply_discounts      — Apply all matching discounts (in priority order)
-5. calculate_coverages  — Compute each coverage's base amount
-6. apply_coverage_multipliers — Apply coverage-level multipliers
-7. enforce_min_max      — Enforce per-coverage min/max premiums
-8. compute_total        — Sum all coverages for the total premium
-"""
+"""Rating engine — executes the full rating pipeline for a product."""
 
 from __future__ import annotations
 
@@ -58,11 +42,11 @@ class RatingResult:
     failed_rules: list[str] = field(default_factory=list)
     surcharges_applied: list[str] = field(default_factory=list)
     discounts_applied: list[str] = field(default_factory=list)
+    reason_codes: list[str] = field(default_factory=list)
     raw_context: dict[str, Any] = field(default_factory=dict)
 
     @property
     def coverage_dict(self) -> dict[str, Decimal]:
-        """Return coverages as a {name: premium} dict."""
         return {c.name: c.final_premium for c in self.coverages}
 
     @property
@@ -70,12 +54,12 @@ class RatingResult:
         return self.eligibility_passed
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize to a plain dict for JSON/API responses."""
         return {
             "product": self.product,
             "jurisdiction": self.jurisdiction,
             "eligible": self.eligibility_passed,
             "failed_rules": self.failed_rules,
+            "reason_codes": self.reason_codes,
             "surcharges_applied": self.surcharges_applied,
             "discounts_applied": self.discounts_applied,
             "total_premium": str(self.total_premium),
@@ -83,86 +67,35 @@ class RatingResult:
         }
 
 
-def evaluate(
-    product: RatingProduct,
-    context: dict[str, Any],
-) -> RatingResult:
-    """
-    Run the full rating pipeline for a product with the given quote context.
-
-    Args:
-        product: A loaded RatingProduct configuration.
-        context: Quote variable values, e.g. {"age": 35, "vehicle_year": 2023, ...}
-
-    Returns:
-        A RatingResult with computed premiums.
-
-    Raises:
-        EligibilityError: If any eligibility rule fails (legacy API).
-        ExpressionError: If an expression cannot be evaluated.
-    """
-    result = RatingResult(
-        product=product.product,
-        jurisdiction=product.jurisdiction,
-        total_premium=Decimal("0"),
-        raw_context=context,
-    )
-
-    # Build the evaluator with configured precision
+def evaluate(product: RatingProduct, context: dict[str, Any]) -> RatingResult:
+    result = RatingResult(product=product.product, jurisdiction=product.jurisdiction, total_premium=Decimal("0"), raw_context=context)
     output = product.output
     precision = output.precision if output else 2
     round_mode = output.round.value if output else "half_up"
-
     evaluator = Evaluator(context, precision=precision, round_mode=round_mode)
 
-    # Step 1: Apply eligibility
-    result.eligibility_passed, result.failed_rules = _apply_eligibility(
-        product, evaluator
-    )
+    result.eligibility_passed, result.failed_rules = _apply_eligibility(product, evaluator)
     if not result.eligibility_passed:
-        return result  # Fail fast
+        result.reason_codes = [f"eligibility_failed:{rule}" for rule in result.failed_rules]
+        return result
 
-    # Step 2: Calculate base premium
     base_premium = _calculate_base(product, context, evaluator)
-
-    # Step 3: Apply surcharges
-    result.surcharges_applied, surcharge_total = _apply_surcharges(
-        product, base_premium, evaluator
-    )
+    result.surcharges_applied, surcharge_total = _apply_surcharges(product, base_premium, evaluator)
     adjusted_premium = base_premium + surcharge_total
+    result.discounts_applied, discount_total = _apply_discounts(product, adjusted_premium, evaluator)
 
-    # Step 4: Apply discounts
-    result.discounts_applied, discount_total = _apply_discounts(
-        product, adjusted_premium, evaluator
-    )
-    adjusted_premium -= discount_total
-
-    # Step 5: Calculate coverages
-    coverages = _calculate_coverages(product, adjusted_premium, evaluator)
+    coverages = _calculate_coverages(product, context, evaluator)
+    _apply_global_adjustments(coverages, surcharge_total, discount_total)
     result.coverages = coverages
-
-    # Step 6: Apply coverage multipliers
     _apply_coverage_multipliers(product, coverages, evaluator)
-
-    # Step 7: Enforce min/max
     _enforce_min_max(coverages)
-
-    # Step 8: Compute total
     result.total_premium = sum(c.final_premium for c in coverages)
-
     return result
 
 
-# ---------------------------------------------------------------------------
-# Pipeline step implementations
-# ---------------------------------------------------------------------------
-
-def _apply_eligibility(
-    product: RatingProduct, evaluator: Evaluator
-) -> tuple[bool, list[str]]:
-    """Check all eligibility rules. Returns (passed, failed_rule_names)."""
+def _apply_eligibility(product: RatingProduct, evaluator: Evaluator) -> tuple[bool, list[str]]:
     failed: list[str] = []
-    for rule in product.eligibility:
+    for rule in sorted(product.eligibility, key=lambda r: r.priority):
         try:
             passed = evaluator.evaluate_boolean(rule.rule)
         except ExpressionError as e:
@@ -174,130 +107,85 @@ def _apply_eligibility(
 
 
 def _calculate_base(product: RatingProduct, context: dict[str, Any], evaluator: Evaluator) -> Decimal:
-    """Calculate the base premium from base_rates and the quote context."""
-    coverage_type = context.get("coverage_type", "standard")
-    if coverage_type in product.base_rates:
-        return evaluator._to_decimal(product.base_rates[coverage_type])
-    # Default to the first base rate
-    first_rate = next(iter(product.base_rates.values()))
-    return evaluator._to_decimal(first_rate)
+    coverage_type = context.get("coverage_type")
+    if not coverage_type:
+        raise ExpressionError("Missing required variable: coverage_type")
+    if coverage_type not in product.base_rates:
+        allowed = ", ".join(sorted(product.base_rates.keys()))
+        raise ExpressionError(f"Unsupported coverage_type '{coverage_type}'. Allowed: {allowed}")
+    return evaluator._to_decimal(product.base_rates[coverage_type])
 
 
-def _apply_surcharges(
-    product: RatingProduct,
-    base_premium: Decimal,
-    evaluator: Evaluator,
-) -> tuple[list[str], Decimal]:
-    """Apply all matching surcharges. Returns (names, total_surcharged_amount)."""
+def _apply_surcharges(product: RatingProduct, base_premium: Decimal, evaluator: Evaluator) -> tuple[list[str], Decimal]:
     applied: list[str] = []
-    total: Decimal = Decimal("0")
-
-    # Sort by priority (lower first)
-    sorted_surcharges = sorted(product.surcharges, key=lambda s: s.priority)  # type: ignore[attr-defined]
-
-    for surch in sorted_surcharges:
-        try:
-            if evaluator.evaluate_boolean(surch.condition):  # type: ignore[attr-defined]
-                surcharge_pct = float(surch.value) / 100  # type: ignore[attr-defined]
-                amount = base_premium * Decimal(str(surcharge_pct))
-                applied.append(surch.name)  # type: ignore[attr-defined]
-                total += amount
-        except ExpressionError:
-            pass  # Skip if condition can't be evaluated
-
+    total = Decimal("0")
+    for surch in sorted(product.surcharges, key=lambda s: s.priority):
+        if evaluator.evaluate_boolean(surch.condition):
+            amount = base_premium * (Decimal(str(surch.value)) / Decimal("100")) if surch.type == "percentage" else Decimal(str(surch.value))
+            applied.append(surch.name)
+            total += amount
     return applied, total
 
 
-def _apply_discounts(
-    product: RatingProduct,
-    premium: Decimal,
-    evaluator: Evaluator,
-) -> tuple[list[str], Decimal]:
-    """Apply all matching discounts. Returns (names, total_discounted_amount)."""
+def _apply_discounts(product: RatingProduct, premium: Decimal, evaluator: Evaluator) -> tuple[list[str], Decimal]:
     applied: list[str] = []
-    total: Decimal = Decimal("0")
-
-    # Sort by priority (lower first)
-    sorted_discounts = sorted(product.discounts, key=lambda d: d.priority)  # type: ignore[attr-defined]
-
-    for disc in sorted_discounts:
-        try:
-            if evaluator.evaluate_boolean(disc.condition):  # type: ignore[attr-defined]
-                disc_pct = float(disc.value) / 100  # type: ignore[attr-defined]
-                amount = premium * Decimal(str(disc_pct))
-                applied.append(disc.name)  # type: ignore[attr-defined]
-                total += amount
-        except ExpressionError:
-            pass  # Skip if condition can't be evaluated
-
+    total = Decimal("0")
+    for disc in sorted(product.discounts, key=lambda d: d.priority):
+        if evaluator.evaluate_boolean(disc.condition):
+            amount = premium * (Decimal(str(disc.value)) / Decimal("100")) if disc.type == "percentage" else Decimal(str(disc.value))
+            applied.append(disc.name)
+            total += amount
     return applied, total
 
 
-def _calculate_coverages(
-    product: RatingProduct,
-    total_premium: Decimal,
-    evaluator: Evaluator,
-) -> list[CoverageResult]:
-    """Calculate base amounts for each coverage."""
+def _calculate_coverages(product: RatingProduct, context: dict[str, Any], evaluator: Evaluator) -> list[CoverageResult]:
     coverages: list[CoverageResult] = []
-
+    coverage_type = context.get("coverage_type")
     for name, cov in product.coverages.items():
         base = cov.base_amount
-
         if base.type == "fixed":
             base_amount = evaluator._to_decimal(base.value)
         elif base.type == "variable":
-            if base.source and base.source in product.base_rates:
+            if base.source == "base_rates":
+                if coverage_type not in product.base_rates:
+                    raise ExpressionError(f"Unsupported coverage_type '{coverage_type}' for base_rates lookup")
+                base_amount = evaluator._to_decimal(product.base_rates[coverage_type])
+            elif base.source and base.source in context:
+                base_amount = evaluator._to_decimal(context[base.source])
+            elif base.source and base.source in product.base_rates:
                 base_amount = evaluator._to_decimal(product.base_rates[base.source])
             else:
-                base_amount = Decimal("0")
+                raise ExpressionError(f"Unknown variable base source '{base.source}' for coverage '{name}'")
         elif base.type == "formula":
-            if base.formula:
-                base_amount = evaluator.evaluate_numeric(base.formula)
-            else:
-                base_amount = Decimal("0")
+            base_amount = evaluator.evaluate_numeric(base.formula) if base.formula else Decimal("0")
         else:
-            base_amount = Decimal("0")
-
-        coverages.append(CoverageResult(
-            name=name,
-            label=cov.label,
-            base_premium=base_amount,
-            surcharge_amount=Decimal("0"),
-            discount_amount=Decimal("0"),
-            final_premium=base_amount,
-            min_premium=cov.min_premium,
-            max_premium=cov.max_premium,
-        ))
-
+            raise ExpressionError(f"Unsupported base amount type '{base.type}' for coverage '{name}'")
+        coverages.append(CoverageResult(name=name, label=cov.label, base_premium=base_amount, surcharge_amount=Decimal("0"), discount_amount=Decimal("0"), final_premium=base_amount, min_premium=cov.min_premium, max_premium=cov.max_premium))
     return coverages
 
 
-def _apply_coverage_multipliers(
-    product: RatingProduct,
-    coverages: list[CoverageResult],
-    evaluator: Evaluator,
-) -> None:
-    """Apply coverage-level multipliers."""
-    for cov_def in product.coverages.values():
+def _apply_global_adjustments(coverages: list[CoverageResult], surcharge_total: Decimal, discount_total: Decimal) -> None:
+    total_base = sum(c.final_premium for c in coverages)
+    if total_base <= 0:
+        return
+    for coverage in coverages:
+        share = coverage.final_premium / total_base
+        coverage.surcharge_amount = surcharge_total * share
+        coverage.discount_amount = discount_total * share
+        coverage.final_premium = coverage.final_premium + coverage.surcharge_amount - coverage.discount_amount
+
+
+def _apply_coverage_multipliers(product: RatingProduct, coverages: list[CoverageResult], evaluator: Evaluator) -> None:
+    for cov_name, cov_def in product.coverages.items():
         if not cov_def.multiplier:
             continue
-
         multiplier = cov_def.multiplier
-        # Check condition
-        if multiplier.condition:
-            try:
-                if not evaluator.evaluate_boolean(multiplier.condition):
-                    continue
-            except ExpressionError:
-                continue
-
-        # Apply multiplier
+        if multiplier.condition and not evaluator.evaluate_boolean(multiplier.condition):
+            continue
         for cr in coverages:
-            if cr.name == cov_def.name:
+            if cr.name == cov_name:
                 if multiplier.type == "percentage":
-                    factor = float(multiplier.value) / 100
-                    cr.final_premium += cr.final_premium * Decimal(str(factor))
+                    cr.final_premium += cr.final_premium * (Decimal(str(multiplier.value)) / Decimal("100"))
                 elif multiplier.type == "flat":
                     cr.final_premium += Decimal(str(multiplier.value))
                 elif multiplier.type == "multiplier":
@@ -305,7 +193,6 @@ def _apply_coverage_multipliers(
 
 
 def _enforce_min_max(coverages: list[CoverageResult]) -> None:
-    """Enforce per-coverage minimum and maximum premiums."""
     for cr in coverages:
         if cr.min_premium and cr.final_premium < cr.min_premium:
             cr.final_premium = cr.min_premium
