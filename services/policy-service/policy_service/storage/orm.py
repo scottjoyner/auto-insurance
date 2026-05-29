@@ -19,6 +19,7 @@ class BindRequestRecord(Base):
     bind_request_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     quote_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     policy_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    request_key: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending_approval", index=True)
     bind_method: Mapped[str] = mapped_column(String(64), nullable=False, default="human_approval")
     total_premium: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
