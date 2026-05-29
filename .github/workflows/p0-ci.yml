@@ -62,6 +62,11 @@ jobs:
           PYTHONPATH: packages/observability
         run: pytest packages/observability/tests
 
+      - name: Run outbox script tests
+        env:
+          PYTHONPATH: .:packages/events
+        run: pytest scripts/tests
+
       - name: Run quote repository tests
         env:
           PYTHONPATH: services/quote-service:packages/rating-dsl:packages/security
