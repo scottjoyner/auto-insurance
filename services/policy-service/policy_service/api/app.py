@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -22,7 +22,7 @@ app.add_middleware(
     allow_origins=settings.allowed_origins,
     allow_credentials=settings.allow_credentials,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "Idempotency-Key"],
 )
 
 
@@ -48,6 +48,7 @@ class BindRequestInputAPI(BaseModel):
     quote_snapshot: dict[str, Any] = Field(default_factory=dict)
     risk_assessment_snapshot: dict[str, Any] = Field(default_factory=dict)
     bind_method: str = "human_approval"
+    request_key: str | None = None
 
 
 class ApprovalDecisionAPI(BaseModel):
@@ -63,6 +64,7 @@ class BindRequestResponse(BaseModel):
     total_premium: float
     effective_date: str
     expiration_date: str
+    request_key: str | None = None
 
 
 class PolicyResponse(BaseModel):
@@ -86,6 +88,7 @@ def _bind_response(record) -> BindRequestResponse:
         total_premium=record.total_premium,
         effective_date=record.effective_date.isoformat(),
         expiration_date=record.expiration_date.isoformat(),
+        request_key=record.request_key,
     )
 
 
@@ -103,11 +106,16 @@ def _policy_response(record) -> PolicyResponse:
     )
 
 
+def _resolve_request_key(input_data: BindRequestInputAPI, header_key: str | None) -> str | None:
+    return input_data.request_key or header_key
+
+
 @app.post("/bind-requests", response_model=BindRequestResponse)
 def create_bind_request(
     input_data: BindRequestInputAPI,
     actor: ActorContext = Depends(bind_actor),
     repository: PolicyRepository = Depends(get_repository),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> BindRequestResponse:
     """Create a persisted bind request from an accepted quote snapshot."""
     if input_data.expiration_date <= input_data.effective_date:
@@ -120,6 +128,7 @@ def create_bind_request(
         risk_assessment_snapshot=input_data.risk_assessment_snapshot,
         actor_id=actor.actor_id,
         bind_method=input_data.bind_method,
+        request_key=_resolve_request_key(input_data, idempotency_key),
     )
     return _bind_response(record)
 
@@ -160,6 +169,7 @@ def compatibility_create_bind_request(
     input_data: BindRequestInputAPI,
     actor: ActorContext = Depends(bind_actor),
     repository: PolicyRepository = Depends(get_repository),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> BindRequestResponse:
     """Compatibility endpoint for earlier docs; delegates to bind request creation."""
     record = repository.create_bind_request(
@@ -170,6 +180,7 @@ def compatibility_create_bind_request(
         risk_assessment_snapshot=input_data.risk_assessment_snapshot,
         actor_id=actor.actor_id,
         bind_method=input_data.bind_method,
+        request_key=_resolve_request_key(input_data, idempotency_key),
     )
     return _bind_response(record)
 
