@@ -17,6 +17,8 @@ class QuoteRecord(Base):
     __tablename__ = "quotes"
 
     quote_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    customer_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     product_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     product_version: Mapped[str] = mapped_column(String(64), nullable=False)
     jurisdiction: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
@@ -99,4 +101,5 @@ class QuoteRatingTraceRecord(Base):
 
 
 Index("ix_quotes_product_status", QuoteRecord.product_id, QuoteRecord.status)
+Index("ix_quotes_tenant_customer", QuoteRecord.tenant_id, QuoteRecord.customer_id)
 Index("ux_quote_versions_quote_version", QuoteVersionRecord.quote_id, QuoteVersionRecord.version_number, unique=True)
