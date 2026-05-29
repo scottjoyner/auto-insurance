@@ -11,7 +11,7 @@ RUN apt-get update \
 COPY . .
 
 RUN python -m pip install --upgrade pip \
-    && pip install "fastapi>=0.115" "uvicorn>=0.34" "pydantic>=2.10" "pydantic-settings>=2.7" "pyyaml>=6.0" "sqlalchemy>=2.0"
+    && pip install "fastapi>=0.115" "uvicorn>=0.34" "pydantic>=2.10" "pydantic-settings>=2.7" "pyyaml>=6.0" "sqlalchemy>=2.0" "PyJWT>=2.10"
 
 EXPOSE 8002
 CMD ["uvicorn", "risk_appetite_service.api.app:app", "--host", "0.0.0.0", "--port", "8002"]
