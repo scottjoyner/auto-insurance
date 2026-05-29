@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from insurance_documents import render_adverse_action_notice
 from insurance_observability import CorrelationIdMiddleware
 from insurance_security.fastapi import ActorContext, Role, require_roles
 from pydantic import BaseModel, Field
@@ -40,6 +41,7 @@ def get_repository(session: Session = Depends(get_session)) -> ClaimsRepository:
 
 claim_write_actor = require_roles(Role.CUSTOMER, Role.AGENT, Role.CLAIMS_MANAGER, Role.SYSTEM)
 claim_read_actor = require_roles(Role.CUSTOMER, Role.AGENT, Role.CLAIMS_MANAGER, Role.SYSTEM)
+claim_manager_actor = require_roles(Role.CLAIMS_MANAGER, Role.SYSTEM)
 
 
 class FNOLRequest(BaseModel):
@@ -52,6 +54,26 @@ class FNOLRequest(BaseModel):
     injuries_indicator: bool = False
     preferred_contact_method: str = "email"
     additional_data: dict[str, Any] = Field(default_factory=dict)
+
+
+class EvidenceRequest(BaseModel):
+    evidence_type: str
+    source: str = "customer"
+    uri: str = ""
+    checksum: str = ""
+    visibility: str = "internal"
+
+
+class ReserveRequest(BaseModel):
+    amount: float = Field(gt=0)
+    reason: str = ""
+
+
+class DenialReviewRequest(BaseModel):
+    reason: str
+    customer_name: str = "Customer"
+    jurisdiction: str = "UNKNOWN"
+    reason_codes: list[str] = Field(default_factory=list)
 
 
 class ClaimResponse(BaseModel):
@@ -69,6 +91,32 @@ class ClaimResponse(BaseModel):
     injuries_indicator: bool
     police_report_indicator: bool
     created_at: str
+
+
+class EvidenceResponse(BaseModel):
+    evidence_id: str
+    claim_id: str
+    evidence_type: str
+    source: str
+    uri: str
+    checksum: str
+    visibility: str
+    uploaded_at: str
+
+
+class ReserveResponse(BaseModel):
+    id: int
+    claim_id: str
+    amount: float
+    reason: str
+    status: str
+    recommended_by_actor_id: str
+    approved_by_actor_id: str | None = None
+
+
+class DenialReviewResponse(BaseModel):
+    claim: ClaimResponse
+    adverse_action_notice_draft: str
 
 
 def _claim_response(record: ClaimRecord) -> ClaimResponse:
@@ -142,6 +190,98 @@ def get_claim(
 ):
     record = _require_claim_access(repository.get(claim_id), actor)
     return _claim_response(record)
+
+
+@app.post("/claims/{claim_id}/evidence", response_model=EvidenceResponse)
+def add_evidence(
+    claim_id: str,
+    request: EvidenceRequest,
+    actor: ActorContext = Depends(claim_write_actor),
+    repository: ClaimsRepository = Depends(get_repository),
+):
+    _require_claim_access(repository.get(claim_id), actor)
+    evidence = repository.add_evidence(
+        claim_id=claim_id,
+        evidence_type=request.evidence_type,
+        source=request.source,
+        uri=request.uri,
+        checksum=request.checksum,
+        visibility=request.visibility,
+        actor_id=actor.actor_id,
+    )
+    return EvidenceResponse(
+        evidence_id=evidence.evidence_id,
+        claim_id=evidence.claim_id,
+        evidence_type=evidence.evidence_type,
+        source=evidence.source,
+        uri=evidence.uri,
+        checksum=evidence.checksum,
+        visibility=evidence.visibility,
+        uploaded_at=evidence.uploaded_at.isoformat(),
+    )
+
+
+@app.post("/claims/{claim_id}/reserves", response_model=ReserveResponse)
+def recommend_reserve(
+    claim_id: str,
+    request: ReserveRequest,
+    actor: ActorContext = Depends(require_roles(Role.AGENT, Role.CLAIMS_MANAGER, Role.SYSTEM)),
+    repository: ClaimsRepository = Depends(get_repository),
+):
+    _require_claim_access(repository.get(claim_id), actor)
+    reserve = repository.recommend_reserve(claim_id=claim_id, amount=request.amount, reason=request.reason, actor_id=actor.actor_id)
+    return ReserveResponse(
+        id=reserve.id,
+        claim_id=reserve.claim_id,
+        amount=reserve.amount,
+        reason=reserve.reason,
+        status=reserve.status,
+        recommended_by_actor_id=reserve.recommended_by_actor_id,
+        approved_by_actor_id=reserve.approved_by_actor_id,
+    )
+
+
+@app.post("/claims/reserves/{reserve_id}/approve", response_model=ReserveResponse)
+def approve_reserve(
+    reserve_id: int,
+    actor: ActorContext = Depends(claim_manager_actor),
+    repository: ClaimsRepository = Depends(get_repository),
+):
+    reserve = repository.approve_reserve(reserve_id=reserve_id, actor_id=actor.actor_id)
+    if reserve is None:
+        raise HTTPException(status_code=404, detail="Reserve not found")
+    _require_claim_access(repository.get(reserve.claim_id), actor)
+    return ReserveResponse(
+        id=reserve.id,
+        claim_id=reserve.claim_id,
+        amount=reserve.amount,
+        reason=reserve.reason,
+        status=reserve.status,
+        recommended_by_actor_id=reserve.recommended_by_actor_id,
+        approved_by_actor_id=reserve.approved_by_actor_id,
+    )
+
+
+@app.post("/claims/{claim_id}/denial-review", response_model=DenialReviewResponse)
+def request_denial_review(
+    claim_id: str,
+    request: DenialReviewRequest,
+    actor: ActorContext = Depends(claim_manager_actor),
+    repository: ClaimsRepository = Depends(get_repository),
+):
+    claim = _require_claim_access(repository.get(claim_id), actor)
+    updated = repository.mark_denial_review(claim_id=claim.claim_id, reason=request.reason, actor_id=actor.actor_id)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    reason_codes = request.reason_codes or ["claim_denial_pending_manager_review"]
+    notice = render_adverse_action_notice(
+        customer_name=request.customer_name,
+        quote_id=claim.claim_id,
+        jurisdiction=request.jurisdiction,
+        reason_codes=reason_codes,
+        details={"claim_id": claim.claim_id, "reason": request.reason},
+    )
+    return DenialReviewResponse(claim=_claim_response(updated), adverse_action_notice_draft=notice)
 
 
 @app.get("/health")
