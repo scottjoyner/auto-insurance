@@ -21,7 +21,7 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "pytest>=8.3" "fastapi>=0.115" "httpx>=0.28" "pydantic>=2.10" "pydantic-settings>=2.7" "pyyaml>=6.0"
+          python -m pip install "pytest>=8.3" "fastapi>=0.115" "httpx>=0.28" "pydantic>=2.10" "pydantic-settings>=2.7" "pyyaml>=6.0" "sqlalchemy>=2.0"
 
       - name: Run rating DSL golden tests
         env:
@@ -32,6 +32,12 @@ jobs:
         env:
           PYTHONPATH: packages/security
         run: pytest packages/security/tests
+
+      - name: Run quote repository tests
+        env:
+          PYTHONPATH: services/quote-service:packages/rating-dsl:packages/security
+          QUOTE_SERVICE_DATABASE_URL: sqlite://
+        run: pytest services/quote-service/tests/test_quote_repository.py
 
       - name: Compose config validation
         run: docker compose config
