@@ -57,18 +57,18 @@ jobs:
 
       - name: Run quote repository tests against Postgres
         env:
-          PYTHONPATH: services/quote-service:packages/rating-dsl:packages/security
+          PYTHONPATH: services/quote-service:packages/rating-dsl:packages/security:packages/observability
           QUOTE_SERVICE_DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/auto_insurance_test
         run: pytest services/quote-service/tests/test_quote_repository.py
 
       - name: Run risk repository tests against Postgres
         env:
-          PYTHONPATH: services/risk-appetite-service:packages/security
+          PYTHONPATH: services/risk-appetite-service:packages/security:packages/observability
           RISK_APPETITE_DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/auto_insurance_test
         run: pytest services/risk-appetite-service/tests/test_risk_repository.py
 
       - name: Run policy repository tests against Postgres
         env:
-          PYTHONPATH: services/policy-service:packages/security
+          PYTHONPATH: services/policy-service:packages/security:packages/observability
           POLICY_SERVICE_DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/auto_insurance_test
         run: pytest services/policy-service/tests/test_policy_repository.py
