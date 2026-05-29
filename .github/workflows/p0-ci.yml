@@ -132,5 +132,17 @@ jobs:
           POLICY_SERVICE_DATABASE_URL: sqlite://
         run: pytest services/policy-service/tests/test_policy_api.py
 
+      - name: Run claims repository tests
+        env:
+          PYTHONPATH: services/claims-service:packages/security:packages/observability
+          CLAIMS_SERVICE_DATABASE_URL: sqlite://
+        run: pytest services/claims-service/tests/test_claims_repository.py
+
+      - name: Run claims API tests
+        env:
+          PYTHONPATH: services/claims-service:packages/security:packages/observability
+          CLAIMS_SERVICE_DATABASE_URL: sqlite://
+        run: pytest services/claims-service/tests/test_claims_api.py
+
       - name: Compose config validation
         run: docker compose config
