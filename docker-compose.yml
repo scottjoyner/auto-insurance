@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-auto_insurance}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  quote-service:
+    build:
+      context: .
+      dockerfile: services/quote-service/Dockerfile
+    environment:
+      QUOTE_SERVICE_DEFAULT_PRODUCT_YAML: /app/data/sample-products/sample_personal_auto_v1.yml
+      QUOTE_SERVICE_ALLOWED_ORIGINS: ${QUOTE_SERVICE_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8000}
+      QUOTE_SERVICE_ALLOW_CREDENTIALS: ${QUOTE_SERVICE_ALLOW_CREDENTIALS:-false}
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  risk-appetite-service:
+    build:
+      context: .
+      dockerfile: services/risk-appetite-service/Dockerfile
+    environment:
+      RISK_APPETITE_POLICY_PATH: /app/services/risk-appetite-service/data/risk-appetite-policy.yml
+      RISK_APPETITE_ALLOWED_ORIGINS: ${RISK_APPETITE_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8000}
+      RISK_APPETITE_ALLOW_CREDENTIALS: ${RISK_APPETITE_ALLOW_CREDENTIALS:-false}
+      RISK_APPETITE_ENABLE_RUNTIME_POLICY_UPDATE: ${RISK_APPETITE_ENABLE_RUNTIME_POLICY_UPDATE:-false}
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
