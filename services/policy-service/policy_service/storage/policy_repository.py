@@ -26,6 +26,8 @@ class PolicyRepository:
         actor_id: str,
         bind_method: str = "human_approval",
         request_key: str | None = None,
+        tenant_id: str | None = None,
+        customer_id: str | None = None,
     ) -> BindRequestRecord:
         if request_key:
             existing = (
@@ -39,6 +41,8 @@ class PolicyRepository:
         policy_id = str(uuid4())
         record = BindRequestRecord(
             bind_request_id=str(uuid4()),
+            tenant_id=tenant_id,
+            customer_id=customer_id,
             quote_id=str(quote_id),
             policy_id=policy_id,
             request_key=request_key,
@@ -95,6 +99,8 @@ class PolicyRepository:
         bind_request.updated_at = datetime.utcnow()
         policy = PolicyRecord(
             policy_id=bind_request.policy_id,
+            tenant_id=bind_request.tenant_id,
+            customer_id=bind_request.customer_id,
             quote_id=bind_request.quote_id,
             bind_request_id=bind_request.bind_request_id,
             state="active",
@@ -139,10 +145,14 @@ class PolicyRepository:
         self.session.refresh(bind_request)
         return bind_request
 
-    def list_policies(self, state: str | None = None, limit: int = 100) -> list[PolicyRecord]:
+    def list_policies(self, state: str | None = None, limit: int = 100, tenant_id: str | None = None, customer_id: str | None = None) -> list[PolicyRecord]:
         query = self.session.query(PolicyRecord).order_by(PolicyRecord.bound_at.desc())
         if state:
             query = query.filter(PolicyRecord.state == state)
+        if tenant_id is not None:
+            query = query.filter(PolicyRecord.tenant_id == tenant_id)
+        if customer_id is not None:
+            query = query.filter(PolicyRecord.customer_id == customer_id)
         return query.limit(limit).all()
 
     def _append_event(self, event_type: str, aggregate_id: str, actor_id: str, payload: dict) -> None:
