@@ -2,14 +2,22 @@
 
 from __future__ import annotations
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
 class RiskAppetiteSettings(BaseSettings):
     """Settings for the Risk Appetite Service."""
+
     app_name: str = "risk-appetite-service"
     version: str = "0.1.0"
     debug: bool = False
+
+    # API security defaults
+    allowed_origins: list[str] = ["http://localhost:3000", "http://localhost:8000"]
+    allow_credentials: bool = False
+    require_auth: bool = True
+    enable_runtime_policy_update: bool = False
 
     # Risk appetite policy
     policy_path: str = "data/risk-appetite-policy.yml"
@@ -37,6 +45,13 @@ class RiskAppetiteSettings(BaseSettings):
 
     # Logging
     log_level: str = "INFO"
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def parse_allowed_origins(cls, value):
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
 
     model_config = {"env_prefix": "RISK_APPETITE_"}
 
