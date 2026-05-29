@@ -17,6 +17,8 @@ class BindRequestRecord(Base):
     __tablename__ = "bind_requests"
 
     bind_request_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    customer_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     quote_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     policy_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     request_key: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
@@ -52,6 +54,8 @@ class PolicyRecord(Base):
     __tablename__ = "policies"
 
     policy_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    customer_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     quote_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     bind_request_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     state: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
