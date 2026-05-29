@@ -40,8 +40,25 @@ services:
       RISK_APPETITE_ALLOWED_ORIGINS: ${RISK_APPETITE_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8000}
       RISK_APPETITE_ALLOW_CREDENTIALS: ${RISK_APPETITE_ALLOW_CREDENTIALS:-false}
       RISK_APPETITE_ENABLE_RUNTIME_POLICY_UPDATE: ${RISK_APPETITE_ENABLE_RUNTIME_POLICY_UPDATE:-false}
+      RISK_APPETITE_DATABASE_URL: ${RISK_APPETITE_DATABASE_URL:-sqlite:////app/risk_appetite_service.db}
+      RISK_APPETITE_AUTO_CREATE_SCHEMA: ${RISK_APPETITE_AUTO_CREATE_SCHEMA:-true}
     ports:
       - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  policy-service:
+    build:
+      context: .
+      dockerfile: services/policy-service/Dockerfile
+    environment:
+      POLICY_SERVICE_ALLOWED_ORIGINS: ${POLICY_SERVICE_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8000}
+      POLICY_SERVICE_ALLOW_CREDENTIALS: ${POLICY_SERVICE_ALLOW_CREDENTIALS:-false}
+      POLICY_SERVICE_DATABASE_URL: ${POLICY_SERVICE_DATABASE_URL:-sqlite:////app/policy_service.db}
+      POLICY_SERVICE_AUTO_CREATE_SCHEMA: ${POLICY_SERVICE_AUTO_CREATE_SCHEMA:-true}
+    ports:
+      - "8003:8003"
     depends_on:
       postgres:
         condition: service_healthy
