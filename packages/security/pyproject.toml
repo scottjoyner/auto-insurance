@@ -9,6 +9,7 @@ description = "Shared authentication and authorization helpers for the insurance
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
+    "PyJWT>=2.10",
 ]
 
 [tool.hatch.build.targets.wheel]
