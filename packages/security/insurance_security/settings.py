@@ -13,6 +13,7 @@ class SecuritySettings:
     jwt_audience: str | None = None
     jwt_algorithm: str = "HS256"
     jwt_hs256_secret: str | None = None
+    jwt_jwks_url: str | None = None
     allow_dev_tokens: bool = True
 
 
@@ -23,5 +24,6 @@ def get_security_settings() -> SecuritySettings:
         jwt_audience=os.getenv("INSURANCE_JWT_AUDIENCE"),
         jwt_algorithm=os.getenv("INSURANCE_JWT_ALGORITHM", "HS256"),
         jwt_hs256_secret=os.getenv("INSURANCE_JWT_HS256_SECRET"),
+        jwt_jwks_url=os.getenv("INSURANCE_JWT_JWKS_URL"),
         allow_dev_tokens=os.getenv("INSURANCE_ALLOW_DEV_TOKENS", "true").lower() == "true",
     )
