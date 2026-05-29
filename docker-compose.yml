@@ -63,5 +63,20 @@ services:
       postgres:
         condition: service_healthy
 
+  claims-service:
+    build:
+      context: .
+      dockerfile: services/claims-service/Dockerfile
+    environment:
+      CLAIMS_SERVICE_ALLOWED_ORIGINS: ${CLAIMS_SERVICE_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8000}
+      CLAIMS_SERVICE_ALLOW_CREDENTIALS: ${CLAIMS_SERVICE_ALLOW_CREDENTIALS:-false}
+      CLAIMS_SERVICE_DATABASE_URL: ${CLAIMS_SERVICE_DATABASE_URL:-sqlite:////app/claims_service.db}
+      CLAIMS_SERVICE_AUTO_CREATE_SCHEMA: ${CLAIMS_SERVICE_AUTO_CREATE_SCHEMA:-true}
+    ports:
+      - "8004:8004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres-data:
