@@ -206,7 +206,7 @@ Escalate to Claims Manager if:
 
 ## Implementation backlog
 
-P0 for claims CRM implementation:
+### P0 claims CRM implementation
 
 1. Add claims-service skeleton.
 2. Add Claim, ClaimEvidence, ClaimNote, ClaimStatusHistory, ClaimReserveHistory ORM models.
@@ -217,7 +217,7 @@ P0 for claims CRM implementation:
 7. Add claim event outbox.
 8. Add tests.
 
-P1:
+### P1 claims CRM implementation
 
 1. Evidence file storage integration.
 2. Customer messaging templates.
@@ -225,3 +225,15 @@ P1:
 4. SLA timers.
 5. Fraud/litigation referral workflow.
 6. Dashboards and reporting.
+
+## Claims PR checklist
+
+- [ ] Models include tenant/customer ownership fields.
+- [ ] FNOL endpoint validates policy ownership.
+- [ ] Claim list endpoint scopes results to actor tenant/customer.
+- [ ] Claim detail endpoint rejects cross-customer access.
+- [ ] Reserve changes require Claims Manager approval.
+- [ ] Denial workflow requires Claims Manager approval and compliance-ready notice draft.
+- [ ] Evidence metadata is immutable after upload except classification updates.
+- [ ] Event outbox captures FNOL, status change, reserve change, evidence upload, and denial approval events.
+- [ ] Tests cover customer isolation, manager approval, coverage date mismatch, and missing evidence routing.
