@@ -7,6 +7,7 @@ in prototype mode.
 
 Accepted development tokens:
 - ``dev:<actor_id>:<ROLE>[,<ROLE>...]``
+- ``dev:<actor_id>:<ROLE>[,<ROLE>...]:<tenant_id>:<customer_id>``
 - ``system:<actor_id>``
 
 Production hardening work remains in P0/P1: JWT signature verification, key
@@ -44,9 +45,31 @@ class ActorContext:
     actor_id: str
     roles: frozenset[Role]
     raw_token_type: str = "development"
+    tenant_id: str | None = None
+    customer_id: str | None = None
 
     def has_any_role(self, allowed_roles: Iterable[Role]) -> bool:
         return bool(self.roles.intersection(set(allowed_roles)))
+
+    def is_privileged(self) -> bool:
+        return self.has_any_role({Role.SYSTEM, Role.ADMIN, Role.UNDERWRITER_L1, Role.UNDERWRITER_L2})
+
+    def can_access_customer(self, customer_id: str | None, tenant_id: str | None = None) -> bool:
+        """Return whether actor can access a customer-owned resource.
+
+        Prototype rule: system/admin/underwriters can access all resources;
+        agents are tenant-scoped when tenant_id is provided; customers are
+        restricted to their own customer_id.
+        """
+        if self.is_privileged():
+            return True
+        if tenant_id and self.tenant_id and self.tenant_id != tenant_id:
+            return False
+        if self.has_any_role({Role.AGENT}) and (tenant_id is None or self.tenant_id == tenant_id):
+            return True
+        if self.has_any_role({Role.CUSTOMER}) and customer_id and self.customer_id == customer_id:
+            return True
+        return False
 
 
 def _parse_dev_token(token: str) -> ActorContext:
@@ -65,11 +88,13 @@ def _parse_dev_token(token: str) -> ActorContext:
     if not token.startswith("dev:"):
         raise ValueError("unsupported token type")
 
-    parts = token.split(":", 2)
-    if len(parts) != 3:
-        raise ValueError("expected dev:<actor_id>:<roles>")
+    parts = token.split(":")
+    if len(parts) not in {3, 5}:
+        raise ValueError("expected dev:<actor_id>:<roles>[:<tenant_id>:<customer_id>]")
 
-    _, actor_id, role_csv = parts
+    _, actor_id, role_csv = parts[:3]
+    tenant_id = parts[3] if len(parts) == 5 and parts[3] else None
+    customer_id = parts[4] if len(parts) == 5 and parts[4] else None
     if not actor_id or not role_csv:
         raise ValueError("token missing actor id or roles")
 
@@ -83,7 +108,7 @@ def _parse_dev_token(token: str) -> ActorContext:
     if not roles:
         raise ValueError("token has no valid roles")
 
-    return ActorContext(actor_id=actor_id, roles=frozenset(roles))
+    return ActorContext(actor_id=actor_id, roles=frozenset(roles), tenant_id=tenant_id, customer_id=customer_id)
 
 
 def get_actor_context(authorization: str | None = Header(default=None)) -> ActorContext:
