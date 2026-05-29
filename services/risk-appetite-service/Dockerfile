@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app/packages/security:/app/services/risk-appetite-service
+ENV PYTHONPATH=/app/packages/security:/app/packages/observability:/app/services/risk-appetite-service
 WORKDIR /app
 
 RUN apt-get update \
