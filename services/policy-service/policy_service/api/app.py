@@ -15,6 +15,7 @@ from insurance_security.fastapi import ActorContext, Role, require_roles
 from policy_service.compliance import evaluate_bind_request
 from policy_service.config.settings import settings
 from policy_service.storage.database import create_schema, get_session
+from policy_service.storage.orm import BindRequestRecord, PolicyRecord
 from policy_service.storage.policy_repository import PolicyRepository
 
 app = FastAPI(title="Policy Service", version="0.1.0")
@@ -117,6 +118,22 @@ def _ensure_bind_compliance(input_data: BindRequestInputAPI) -> None:
         raise HTTPException(status_code=409, detail={"reason_codes": decision.reason_codes, "details": decision.details})
 
 
+def _require_bind_access(record: BindRequestRecord | None, actor: ActorContext) -> BindRequestRecord:
+    if record is None:
+        raise HTTPException(status_code=404, detail="Bind request not found")
+    if not actor.can_access_customer(record.customer_id, record.tenant_id):
+        raise HTTPException(status_code=403, detail="Bind request access denied")
+    return record
+
+
+def _require_policy_access(record: PolicyRecord | None, actor: ActorContext) -> PolicyRecord:
+    if record is None:
+        raise HTTPException(status_code=404, detail="Policy not found")
+    if not actor.can_access_customer(record.customer_id, record.tenant_id):
+        raise HTTPException(status_code=403, detail="Policy access denied")
+    return record
+
+
 @app.post("/bind-requests", response_model=BindRequestResponse)
 def create_bind_request(
     input_data: BindRequestInputAPI,
@@ -124,7 +141,6 @@ def create_bind_request(
     repository: PolicyRepository = Depends(get_repository),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> BindRequestResponse:
-    """Create a persisted bind request from an accepted quote snapshot."""
     if input_data.expiration_date <= input_data.effective_date:
         raise HTTPException(status_code=400, detail="expiration_date must be after effective_date")
     _ensure_bind_compliance(input_data)
@@ -137,7 +153,10 @@ def create_bind_request(
         actor_id=actor.actor_id,
         bind_method=input_data.bind_method,
         request_key=_resolve_request_key(input_data, idempotency_key),
+        tenant_id=actor.tenant_id,
+        customer_id=actor.customer_id,
     )
+    _require_bind_access(record, actor)
     return _bind_response(record)
 
 
@@ -147,10 +166,7 @@ def get_bind_request(
     actor: ActorContext = Depends(read_actor),
     repository: PolicyRepository = Depends(get_repository),
 ) -> BindRequestResponse:
-    _ = actor
-    record = repository.get_bind_request(bind_request_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail="Bind request not found")
+    record = _require_bind_access(repository.get_bind_request(bind_request_id), actor)
     return _bind_response(record)
 
 
@@ -161,15 +177,14 @@ def approve_bind_request(
     actor: ActorContext = Depends(approval_actor),
     repository: PolicyRepository = Depends(get_repository),
 ) -> PolicyResponse:
+    _require_bind_access(repository.get_bind_request(bind_request_id), actor)
     if decision.approval_status != "approved":
         rejected = repository.reject_bind_request(bind_request_id, actor_id=actor.actor_id, comments=decision.comments)
         if rejected is None:
             raise HTTPException(status_code=404, detail="Bind request not found")
         raise HTTPException(status_code=409, detail="Bind request rejected")
     policy = repository.approve_bind_request(bind_request_id, actor_id=actor.actor_id, comments=decision.comments)
-    if policy is None:
-        raise HTTPException(status_code=404, detail="Bind request not found or not approvable")
-    return _policy_response(policy)
+    return _policy_response(_require_policy_access(policy, actor))
 
 
 @app.post("/policies/bind", response_model=BindRequestResponse)
@@ -179,7 +194,6 @@ def compatibility_create_bind_request(
     repository: PolicyRepository = Depends(get_repository),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> BindRequestResponse:
-    """Compatibility endpoint for earlier docs; delegates to bind request creation."""
     if input_data.expiration_date <= input_data.effective_date:
         raise HTTPException(status_code=400, detail="expiration_date must be after effective_date")
     _ensure_bind_compliance(input_data)
@@ -192,7 +206,10 @@ def compatibility_create_bind_request(
         actor_id=actor.actor_id,
         bind_method=input_data.bind_method,
         request_key=_resolve_request_key(input_data, idempotency_key),
+        tenant_id=actor.tenant_id,
+        customer_id=actor.customer_id,
     )
+    _require_bind_access(record, actor)
     return _bind_response(record)
 
 
@@ -202,10 +219,7 @@ def get_policy(
     actor: ActorContext = Depends(read_actor),
     repository: PolicyRepository = Depends(get_repository),
 ) -> PolicyResponse:
-    _ = actor
-    policy = repository.get_policy(policy_id)
-    if policy is None:
-        raise HTTPException(status_code=404, detail="Policy not found")
+    policy = _require_policy_access(repository.get_policy(policy_id), actor)
     return _policy_response(policy)
 
 
@@ -216,8 +230,12 @@ def list_policies(
     actor: ActorContext = Depends(read_actor),
     repository: PolicyRepository = Depends(get_repository),
 ) -> list[PolicyResponse]:
-    _ = actor
-    return [_policy_response(policy) for policy in repository.list_policies(state=state, limit=limit)]
+    tenant_id = None if actor.is_privileged() else actor.tenant_id
+    customer_id = None if actor.is_privileged() else actor.customer_id
+    return [
+        _policy_response(policy)
+        for policy in repository.list_policies(state=state, limit=limit, tenant_id=tenant_id, customer_id=customer_id)
+    ]
 
 
 @app.get("/health")
