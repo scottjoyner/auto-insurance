@@ -43,6 +43,37 @@ def test_create_bind_request_creates_pending_approval_and_event():
     assert session.query(PolicyEventRecord).count() == 1
 
 
+def test_duplicate_bind_request_key_returns_existing_record():
+    session = _session()
+    repository = PolicyRepository(session)
+    quote_id = uuid4()
+
+    first = repository.create_bind_request(
+        quote_id=quote_id,
+        effective_date=datetime.utcnow(),
+        expiration_date=datetime.utcnow() + timedelta(days=365),
+        quote_snapshot={"total_premium": 1200.0},
+        risk_assessment_snapshot={"decision": "ACCEPT"},
+        actor_id="agent-1",
+        request_key="bind-quote-1",
+    )
+    second = repository.create_bind_request(
+        quote_id=quote_id,
+        effective_date=datetime.utcnow(),
+        expiration_date=datetime.utcnow() + timedelta(days=365),
+        quote_snapshot={"total_premium": 1200.0},
+        risk_assessment_snapshot={"decision": "ACCEPT"},
+        actor_id="agent-1",
+        request_key="bind-quote-1",
+    )
+
+    assert second.bind_request_id == first.bind_request_id
+    assert second.policy_id == first.policy_id
+    assert session.query(BindRequestRecord).count() == 1
+    assert session.query(ApprovalRecord).count() == 1
+    assert session.query(PolicyEventRecord).count() == 1
+
+
 def test_approve_bind_request_creates_active_policy():
     session = _session()
     repository = PolicyRepository(session)
@@ -56,9 +87,12 @@ def test_approve_bind_request_creates_active_policy():
     )
 
     policy = repository.approve_bind_request(bind_request.bind_request_id, actor_id="uw-1", comments="Approved")
+    second_policy = repository.approve_bind_request(bind_request.bind_request_id, actor_id="uw-1", comments="Approved again")
 
     assert policy is not None
+    assert second_policy is not None
     assert policy.policy_id == bind_request.policy_id
+    assert second_policy.policy_id == policy.policy_id
     assert policy.state == "active"
     assert session.query(PolicyRecord).count() == 1
     assert session.query(PolicyEventRecord).count() == 3
