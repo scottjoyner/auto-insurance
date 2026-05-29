@@ -30,8 +30,8 @@ def _client():
     return TestClient(app)
 
 
-def _headers(role="AGENT"):
-    return {"Authorization": f"Bearer dev:test-user:{role}"}
+def _headers(role="AGENT", tenant="tenant-1", customer="customer-1"):
+    return {"Authorization": f"Bearer dev:test-user:{role}:{tenant}:{customer}"}
 
 
 def _quote_payload():
@@ -77,4 +77,33 @@ def test_quote_create_get_explain_and_accept_flow():
         assert accepted.json()["status"] == "CONVERTED"
     else:
         assert accepted.status_code == 409
+    app.dependency_overrides.clear()
+
+
+def test_customer_cannot_read_another_customers_quote():
+    client = _client()
+    created = client.post("/quotes", json=_quote_payload(), headers=_headers("CUSTOMER", "tenant-1", "customer-1"))
+    assert created.status_code == 200
+    quote_id = created.json()["quote_id"]
+
+    forbidden = client.get(f"/quotes/{quote_id}", headers=_headers("CUSTOMER", "tenant-1", "customer-2"))
+    assert forbidden.status_code == 403
+
+    allowed = client.get(f"/quotes/{quote_id}", headers=_headers("CUSTOMER", "tenant-1", "customer-1"))
+    assert allowed.status_code == 200
+    app.dependency_overrides.clear()
+
+
+def test_quote_list_is_scoped_to_actor_customer():
+    client = _client()
+    first = client.post("/quotes", json=_quote_payload(), headers=_headers("CUSTOMER", "tenant-1", "customer-1"))
+    second = client.post("/quotes", json=_quote_payload(), headers=_headers("CUSTOMER", "tenant-1", "customer-2"))
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+    listed = client.get("/quotes", headers=_headers("CUSTOMER", "tenant-1", "customer-1"))
+    assert listed.status_code == 200
+    quote_ids = {quote["quote_id"] for quote in listed.json()}
+    assert first.json()["quote_id"] in quote_ids
+    assert second.json()["quote_id"] not in quote_ids
     app.dependency_overrides.clear()
