@@ -11,6 +11,10 @@ from risk_appetite_service.domain.models import RiskAssessment, RiskAppetitePoli
 from risk_appetite_service.storage.orm import RiskAssessmentRecord, RiskPolicyApprovalRecord, RiskPolicyVersionRecord
 
 
+class RiskPolicyLifecycleError(ValueError):
+    """Raised when a risk policy transition is invalid."""
+
+
 class RiskRepository:
     """SQLAlchemy-backed risk appetite repository."""
 
@@ -34,6 +38,8 @@ class RiskRepository:
         record = self.session.get(RiskPolicyVersionRecord, policy_id)
         if record is None:
             return None
+        if record.status != "draft":
+            raise RiskPolicyLifecycleError(f"Only draft policies can be submitted; current status={record.status}")
         record.status = "submitted"
         record.submitted_by_actor_id = actor_id
         record.submitted_at = datetime.utcnow()
@@ -46,6 +52,8 @@ class RiskRepository:
         record = self.session.get(RiskPolicyVersionRecord, policy_id)
         if record is None:
             return None
+        if record.status != "submitted":
+            raise RiskPolicyLifecycleError(f"Only submitted policies can be approved; current status={record.status}")
         record.status = "approved"
         record.approved_by_actor_id = actor_id
         record.approved_at = datetime.utcnow()
@@ -58,6 +66,8 @@ class RiskRepository:
         record = self.session.get(RiskPolicyVersionRecord, policy_id)
         if record is None:
             return None
+        if record.status != "approved":
+            raise RiskPolicyLifecycleError(f"Only approved policies can be activated; current status={record.status}")
         self.session.query(RiskPolicyVersionRecord).filter(RiskPolicyVersionRecord.status == "active").update({"status": "deprecated"})
         record.status = "active"
         record.activated_by_actor_id = actor_id
