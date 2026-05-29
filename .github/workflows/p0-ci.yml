@@ -67,6 +67,9 @@ jobs:
       - name: Validate policy migration
         run: python scripts/apply_sql_migrations.py --database /tmp/policy_phase1.db --migrations services/policy-service/migrations
 
+      - name: Validate claims migration
+        run: python scripts/apply_sql_migrations.py --database /tmp/claims_phase1.db --migrations services/claims-service/migrations
+
       - name: Run rating DSL golden tests
         env:
           PYTHONPATH: packages/rating-dsl
@@ -134,13 +137,13 @@ jobs:
 
       - name: Run claims repository tests
         env:
-          PYTHONPATH: services/claims-service:packages/security:packages/observability
+          PYTHONPATH: services/claims-service:packages/security:packages/observability:packages/documents
           CLAIMS_SERVICE_DATABASE_URL: sqlite://
         run: pytest services/claims-service/tests/test_claims_repository.py
 
       - name: Run claims API tests
         env:
-          PYTHONPATH: services/claims-service:packages/security:packages/observability
+          PYTHONPATH: services/claims-service:packages/security:packages/observability:packages/documents
           CLAIMS_SERVICE_DATABASE_URL: sqlite://
         run: pytest services/claims-service/tests/test_claims_api.py
 
