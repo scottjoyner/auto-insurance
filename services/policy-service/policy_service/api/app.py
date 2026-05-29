@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from insurance_security.fastapi import ActorContext, Role, require_roles
+from policy_service.compliance import evaluate_bind_request
 from policy_service.config.settings import settings
 from policy_service.storage.database import create_schema, get_session
 from policy_service.storage.policy_repository import PolicyRepository
@@ -110,6 +111,12 @@ def _resolve_request_key(input_data: BindRequestInputAPI, header_key: str | None
     return input_data.request_key or header_key
 
 
+def _ensure_bind_compliance(input_data: BindRequestInputAPI) -> None:
+    decision = evaluate_bind_request(input_data.quote_snapshot, input_data.risk_assessment_snapshot)
+    if not decision.allowed:
+        raise HTTPException(status_code=409, detail={"reason_codes": decision.reason_codes, "details": decision.details})
+
+
 @app.post("/bind-requests", response_model=BindRequestResponse)
 def create_bind_request(
     input_data: BindRequestInputAPI,
@@ -120,6 +127,7 @@ def create_bind_request(
     """Create a persisted bind request from an accepted quote snapshot."""
     if input_data.expiration_date <= input_data.effective_date:
         raise HTTPException(status_code=400, detail="expiration_date must be after effective_date")
+    _ensure_bind_compliance(input_data)
     record = repository.create_bind_request(
         quote_id=input_data.quote_id,
         effective_date=input_data.effective_date,
@@ -172,6 +180,9 @@ def compatibility_create_bind_request(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> BindRequestResponse:
     """Compatibility endpoint for earlier docs; delegates to bind request creation."""
+    if input_data.expiration_date <= input_data.effective_date:
+        raise HTTPException(status_code=400, detail="expiration_date must be after effective_date")
+    _ensure_bind_compliance(input_data)
     record = repository.create_bind_request(
         quote_id=input_data.quote_id,
         effective_date=input_data.effective_date,
