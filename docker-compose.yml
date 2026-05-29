@@ -23,6 +23,8 @@ services:
       QUOTE_SERVICE_DEFAULT_PRODUCT_YAML: /app/data/sample-products/sample_personal_auto_v1.yml
       QUOTE_SERVICE_ALLOWED_ORIGINS: ${QUOTE_SERVICE_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8000}
       QUOTE_SERVICE_ALLOW_CREDENTIALS: ${QUOTE_SERVICE_ALLOW_CREDENTIALS:-false}
+      QUOTE_SERVICE_DATABASE_URL: ${QUOTE_SERVICE_DATABASE_URL:-sqlite:////app/quote_service.db}
+      QUOTE_SERVICE_AUTO_CREATE_SCHEMA: ${QUOTE_SERVICE_AUTO_CREATE_SCHEMA:-true}
     ports:
       - "8001:8001"
     depends_on:
