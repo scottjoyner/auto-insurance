@@ -21,7 +21,13 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "pytest>=8.3" "fastapi>=0.115" "httpx>=0.28" "pydantic>=2.10" "pydantic-settings>=2.7" "pyyaml>=6.0" "sqlalchemy>=2.0" "PyJWT>=2.10"
+          python -m pip install "pytest>=8.3" "fastapi>=0.115" "httpx>=0.28" "pydantic>=2.10" "pydantic-settings>=2.7" "pyyaml>=6.0" "sqlalchemy>=2.0" "PyJWT>=2.10" "alembic>=1.13"
+
+      - name: Validate Alembic revision syntax
+        run: |
+          python -m py_compile services/quote-service/alembic/versions/0001_phase1_quote_baseline.py
+          python -m py_compile services/risk-appetite-service/alembic/versions/0001_phase1_risk_baseline.py
+          python -m py_compile services/policy-service/alembic/versions/0001_phase1_policy_baseline.py
 
       - name: Validate quote migration
         run: python scripts/apply_sql_migrations.py --database /tmp/quote_phase1.db --migrations services/quote-service/migrations
