@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import jwt
+from jwt import PyJWKClient
 
 from insurance_security.fastapi import ActorContext, Role
 from insurance_security.settings import SecuritySettings
@@ -14,28 +15,46 @@ class JWTValidationError(ValueError):
     """Raised when a bearer JWT cannot be validated."""
 
 
+def _decode_hs256(token: str, settings: SecuritySettings) -> dict[str, Any]:
+    if not settings.jwt_hs256_secret:
+        raise JWTValidationError("INSURANCE_JWT_HS256_SECRET is required in HS256 jwt auth mode")
+    return jwt.decode(
+        token,
+        settings.jwt_hs256_secret,
+        algorithms=["HS256"],
+        issuer=settings.jwt_issuer,
+        audience=settings.jwt_audience,
+        options={"require": ["sub"]},
+    )
+
+
+def _decode_jwks(token: str, settings: SecuritySettings) -> dict[str, Any]:
+    if not settings.jwt_jwks_url:
+        raise JWTValidationError("INSURANCE_JWT_JWKS_URL is required in RS256 jwt auth mode")
+    client = PyJWKClient(settings.jwt_jwks_url)
+    signing_key = client.get_signing_key_from_jwt(token)
+    return jwt.decode(
+        token,
+        signing_key.key,
+        algorithms=[settings.jwt_algorithm],
+        issuer=settings.jwt_issuer,
+        audience=settings.jwt_audience,
+        options={"require": ["sub"]},
+    )
+
+
 def validate_jwt_token(token: str, settings: SecuritySettings) -> ActorContext:
     """Validate a signed JWT and convert claims into ActorContext.
 
-    Phase 2 production path supports HS256 shared-secret validation and validates
-    issuer/audience when configured. A JWKS/RS256 resolver should replace or
-    extend this for external IdPs.
+    Supported production modes:
+    - HS256 with INSURANCE_JWT_HS256_SECRET for internal/test deployments.
+    - RS256/ES256/etc. with INSURANCE_JWT_JWKS_URL through PyJWT PyJWKClient.
     """
-    if settings.jwt_algorithm != "HS256":
-        raise JWTValidationError("Only HS256 is implemented in this production-gap pass; add JWKS/RS256 before external IdP use")
-    if not settings.jwt_hs256_secret:
-        raise JWTValidationError("INSURANCE_JWT_HS256_SECRET is required in jwt auth mode")
-
-    options: dict[str, Any] = {"require": ["sub"]}
     try:
-        claims = jwt.decode(
-            token,
-            settings.jwt_hs256_secret,
-            algorithms=[settings.jwt_algorithm],
-            issuer=settings.jwt_issuer,
-            audience=settings.jwt_audience,
-            options=options,
-        )
+        if settings.jwt_algorithm == "HS256":
+            claims = _decode_hs256(token, settings)
+        else:
+            claims = _decode_jwks(token, settings)
     except jwt.PyJWTError as exc:
         raise JWTValidationError(str(exc)) from exc
 
