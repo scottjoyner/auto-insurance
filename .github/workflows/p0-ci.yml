@@ -47,6 +47,21 @@ jobs:
           PYTHONPATH: packages/orchestration
         run: pytest packages/orchestration/tests
 
+      - name: Run events tests
+        env:
+          PYTHONPATH: packages/events
+        run: pytest packages/events/tests
+
+      - name: Run documents tests
+        env:
+          PYTHONPATH: packages/documents
+        run: pytest packages/documents/tests
+
+      - name: Run observability tests
+        env:
+          PYTHONPATH: packages/observability
+        run: pytest packages/observability/tests
+
       - name: Run quote repository tests
         env:
           PYTHONPATH: services/quote-service:packages/rating-dsl:packages/security
