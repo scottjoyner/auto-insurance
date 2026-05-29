@@ -2,6 +2,8 @@
 
 CREATE TABLE IF NOT EXISTS bind_requests (
     bind_request_id VARCHAR(36) PRIMARY KEY,
+    tenant_id VARCHAR(128),
+    customer_id VARCHAR(128),
     quote_id VARCHAR(36) NOT NULL,
     policy_id VARCHAR(36) NOT NULL,
     request_key VARCHAR(128),
@@ -17,6 +19,7 @@ CREATE TABLE IF NOT EXISTS bind_requests (
     updated_at TIMESTAMP NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS ix_bind_requests_tenant_customer ON bind_requests (tenant_id, customer_id);
 CREATE INDEX IF NOT EXISTS ix_bind_requests_quote_id ON bind_requests (quote_id);
 CREATE INDEX IF NOT EXISTS ix_bind_requests_policy_id ON bind_requests (policy_id);
 CREATE INDEX IF NOT EXISTS ix_bind_requests_request_key ON bind_requests (request_key);
@@ -37,6 +40,8 @@ CREATE INDEX IF NOT EXISTS ix_bind_approvals_status ON bind_approvals (status);
 
 CREATE TABLE IF NOT EXISTS policies (
     policy_id VARCHAR(36) PRIMARY KEY,
+    tenant_id VARCHAR(128),
+    customer_id VARCHAR(128),
     quote_id VARCHAR(36) NOT NULL,
     bind_request_id VARCHAR(36) NOT NULL,
     state VARCHAR(32) NOT NULL DEFAULT 'active',
@@ -48,6 +53,7 @@ CREATE TABLE IF NOT EXISTS policies (
     bound_at TIMESTAMP NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS ix_policies_tenant_customer ON policies (tenant_id, customer_id);
 CREATE INDEX IF NOT EXISTS ix_policies_quote_id ON policies (quote_id);
 CREATE INDEX IF NOT EXISTS ix_policies_bind_request_id ON policies (bind_request_id);
 CREATE INDEX IF NOT EXISTS ix_policies_state ON policies (state);
