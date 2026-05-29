@@ -1,182 +1,205 @@
-# Insurance Operating System — Architecture Prototype
+# Auto Insurance Operating System
 
-## Status
+Owner: Platform Engineering  
+Audience: engineering, product, compliance, operations, security  
+Last reviewed: 2026-05-29  
+Status: active production-grade architecture and implementation guide
 
-**Phase**: P0 implementation hardening started  
-**Version**: 2026.05.29  
-**Last Updated**: 2026-05-29
+## Vision
 
-## What This Is
+This repository is the foundation for a production-grade insurance operating system. The goal is to support the complete lifecycle of a regulated insurance business: customer/account management, quote, risk appetite, underwriting, bind, policy administration, claims, compliance communications, event audit, treasury/float controls, and blockchain-backed proof of critical commitments.
 
-An architecture prototype for an MGA-style insurance operating system. It defines the design, governance, and implementation plan for a platform that combines deterministic rating, AI-assisted workflows, blockchain audit commitment, and treasury management.
+The system is blockchain-first, but not blockchain-only. Blockchain should provide cryptographic proof for commitments, state transitions, selected payment/audit events, and governance checkpoints. Regulated workflows, PII, customer evidence, actuarial models, rating logic, documents, and sensitive records remain off-chain in auditable service databases.
 
-## What This Is NOT
+## Product guardrails
 
-- NOT a real filed insurance product
-- NOT a regulatory filing
-- NOT a production system
-- NOT a business plan
-- NOT a financial product
+This repository is not a filed insurance product and must not be used to sell real policies without regulatory, actuarial, legal, compliance, and security review.
 
-All values in this repository are architecture test data.
+Production use requires:
 
-## Current State
+- filed and jurisdiction-specific rates, rules, forms, notices, and endorsements;
+- deterministic, versioned rating logic;
+- human approval for bind, decline, claims denial, treasury, and smart-contract actions;
+- solvency, reserve, liquidity, and risk-appetite gates;
+- tenant/customer ownership enforcement on all customer data;
+- PII redaction in logs, events, and external outputs;
+- immutable audit trails for material decisions;
+- legally reviewed policy forms and adverse-action templates;
+- secure identity provider integration through JWT/JWKS;
+- Postgres migrations and production secret management.
 
-See `docs/00_current_state_assessment.md` for the implementation-cycle assessment and prioritized P0/P1/P2 plan.
+## Current implementation status
 
-The repository now includes the beginning of a P0 implementation pass:
+The repository now contains a local, testable multi-service foundation.
 
-- Shared `packages/security` FastAPI RBAC scaffold for development-only actor context.
-- Quote service CORS hardening and protected business endpoints.
-- Rating engine fix for `base_rates` lookup and unknown coverage-tier handling.
-- Root `docker-compose.yml` baseline for local service orchestration.
-- `.env.example` for local development settings.
-- Expanded `SECURITY.md` with non-production constraints and required production hardening.
+| Area | Status | Notes |
+|---|---|---|
+| Shared security | Implemented foundation | Dev tokens plus JWT/JWKS production path, RBAC, tenant/customer context. |
+| Quote service | Implemented foundation | Quote generation, persistence, explainability, acceptance, ownership enforcement, lifecycle records. |
+| Risk appetite service | Implemented foundation | Risk assessments, policy version lifecycle, activation guardrails, persisted assessments. |
+| Policy service | Implemented foundation | Bind requests, approval workflow, idempotency, compliance guard, issued policy records, ownership enforcement. |
+| Claims service | Implemented foundation | FNOL, claim ownership, evidence metadata, reserve approval, denial review, adverse-action draft. |
+| Events | Implemented scaffold | Outbox records and publisher abstraction; production broker adapter still needed. |
+| Documents | Implemented scaffold | Policy packet and adverse-action draft renderers; legal templates still needed. |
+| Observability | Implemented scaffold | Correlation IDs and redaction helpers; OpenTelemetry exporter still needed. |
+| Database | Implemented foundation | SQL migrations, Alembic scaffolds, SQLite local mode, Postgres CI scaffold. |
+| Blockchain | Design target | Registry/audit commitment design remains to be built out into deployable gateway. |
+| Treasury/float | Design target | Needs reserve/liquidity/IPS/counterparty/approval implementation. |
+| UI | Design gap | Needs production console, customer portal, agent desktop, claims workspace, and admin/security views. |
 
-## Decisions Made
-
-### Product
-- **Product**: Sample personal auto insurance
-- **Status**: `architecture_sample_only`
-- **Jurisdiction**: SAMPLE (modeled on NC regulations)
-- **Target**: Architecture prototype / MGA-style operating layer
-
-### Service Stack
-- **Language**: Python 3.12+, FastAPI, SQLAlchemy, Pydantic v2
-- **Blockchain gateway**: TypeScript, ethers.js, Hardhat
-- **Testing**: pytest, hypothesis, pytest-asyncio
-- **Docker**: docker-compose for local dev
-
-### Blockchain
-- **MVP**: Local Anvil only (no public chain)
-- **Contracts**: PolicyRegistry + AuditEventRegistry only for MVP
-- **Policy representation**: Registry records (not NFTs)
-- **Customer wallet**: Wallet abstraction (customers do not see blockchain)
-
-### AI Authority
-- **Allowed**: collect_intake, explain_product, explain_quote, prepare_quote_request, route_to_human_review, draft_customer_communication
-- **Restricted (requires human approval)**: execute_bind, execute_decline, execute_claim_decision, execute_treasury_action, modify_rating_logic, approve_product, modify_governance_policy, execute_smart_contract_admin
-- **AI can bind**: NO — AI prepares bind requests only, human approval required
-
-### Rating
-- **Approach**: Deterministic rule-based via YAML rating DSL
-- **ML-based**: Phase 4+ scope
-
-### MVP Scope
-- **Payment**: Fiat only, stubbed
-- **Customer channel**: HTTP API (web chat) only
-- **Third-party data**: None (all inputs self-reported)
-- **Claims**: FNOL intake + coverage check only
-
-## Directory Structure
+## Service map
 
 ```text
 auto-insurance/
-  docs/
-    00_current_state_assessment.md
-    01_vision.md
-    02_architecture.md
-    03_execution_plan.md
-    ...
-  governance/
-  data/
-    sample-products/
   packages/
-    rating-dsl/
-    security/
-    shared-types/
-    event-schemas/
+    rating-dsl/             Deterministic rating DSL and golden tests
+    security/               RBAC, dev auth, JWT/JWKS auth, ActorContext
+    orchestration/          Quote -> risk -> bind workflow client
+    events/                 Event publisher abstractions
+    documents/              Policy packet and adverse-action draft renderers
+    observability/          Correlation IDs and PII redaction
+    secrets/                Secret-provider abstractions
   services/
-    quote-service/
-    risk-appetite-service/
-  infra/
-  docker-compose.yml
-  .env.example
-  SECURITY.md
-  README.md
+    quote-service/          Quote generation, persistence, explainability, accept
+    risk-appetite-service/  Risk policy lifecycle and assessments
+    policy-service/         Bind request, approval, policy issuance
+    claims-service/         FNOL, evidence, reserves, denial-review workflow
+  docs/                     Architecture, operating guides, gap registers, PR plans
+  scripts/                  Migration and outbox utilities
+  docker-compose.yml        Local stack
 ```
 
-## Execution Plan
+## Local development
 
-See `docs/03_execution_plan.md` and `docs/00_current_state_assessment.md` for the detailed implementation plan.
+Copy local env values:
 
-### Milestone 1: Shared Foundation
-- Rating DSL defined with syntax, schema, and sample product.
-- AI tool interface and authority model defined.
-- Shared-types and event-schema documentation drafted.
-- P0 security scaffold started.
+```bash
+cp .env.example .env
+```
 
-### Milestone 2: Quote Service MVP — Partial / not complete
-- Draft FastAPI quote generation endpoint exists.
-- Quote explain and quote health lookup still need durable persistence.
-- Recalculation is protected but still needs stored quote lookup for real deltas.
-- P1.1 must implement Postgres persistence, quote versioning, event outbox, and complete API behavior.
+Run the stack:
 
-### Milestone 3: Risk Appetite Service MVP — Partial / not complete
-- Draft risk assessment endpoint exists.
-- Runtime policy update must remain disabled by default until a versioned approval workflow exists.
-- P1.2 must implement persisted risk assessments and versioned risk policy approval.
+```bash
+docker compose build
+docker compose up
+```
 
-### Milestone 4: Policy Service MVP
-- Bind flow with audit packet.
-- Policy lifecycle state machine.
-- Human approval workflow.
+Default local service ports:
 
-### Milestone 5: Blockchain Gateway MVP
-- PolicyRegistry + AuditEventRegistry contracts.
-- Local Anvil deployment.
-- Policy commitment flow.
+| Service | Port |
+|---|---:|
+| quote-service | 8001 |
+| risk-appetite-service | 8002 |
+| policy-service | 8003 |
+| claims-service | 8004 |
+| postgres | 5432 |
 
-### Milestone 6: AI Agent Orchestrator MVP
-- Session management.
-- Tool permission enforcement.
-- AI service integration.
+## Authentication modes
 
-### Milestone 7: Claims Service MVP
-- FNOL intake.
-- Coverage check.
+Local development may use development bearer tokens:
 
-### Milestone 8: Treasury Service MVP
-- Premium allocation stub.
-- Reserve snapshot stub.
+```text
+Bearer dev:<actor_id>:<ROLE>[,<ROLE>...]:<tenant_id>:<customer_id>
+Bearer system:<actor_id>
+```
 
-## Key Governance Decisions
+Production should use JWT/JWKS:
 
-### Who Can Do What
+```bash
+INSURANCE_AUTH_MODE=jwt
+INSURANCE_ALLOW_DEV_TOKENS=false
+INSURANCE_JWT_ALGORITHM=RS256
+INSURANCE_JWT_JWKS_URL=https://your-idp/.well-known/jwks.json
+INSURANCE_JWT_ISSUER=https://your-idp/
+INSURANCE_JWT_AUDIENCE=auto-insurance-api
+```
 
-| Action | AI Agent | Underwriter | Claims Manager | Treasury Approver | Smart Contract Signer |
-|---|---|---|---|---|---|
-| Collect intake | YES | YES | NO | NO | NO |
-| Explain product | YES | YES | NO | NO | NO |
-| Generate quote | YES (via service) | YES (via service) | NO | NO | NO |
-| Evaluate risk | YES (via service) | YES (via service) | NO | NO | NO |
-| Approve bind | NO (prepares only) | YES | NO | NO | NO |
-| Decline risk | NO (refers only) | YES | NO | NO | NO |
-| Approve claim | NO (summarizes only) | NO | YES | NO | NO |
-| Allocate premium | NO | NO | NO | YES | NO |
-| Deploy contracts | NO | NO | NO | NO | YES |
-| Modify rating | NO | NO | NO | NO | NO |
-| Approve product | NO | NO | NO | NO | NO |
+Required claims:
 
-### AI Agent Restrictions
+- `sub`
+- `roles`
+- `tenant_id`
+- `customer_id`
 
-1. AI cannot modify rating logic.
-2. AI cannot bind policies.
-3. AI cannot decline risks.
-4. AI cannot deny claims.
-5. AI cannot execute treasury actions.
-6. AI cannot modify governance policies.
-7. AI cannot approve products.
-8. All AI tool calls must be audited.
+## Core workflow vision
 
-## Rating DSL
+### Quote to policy
 
-The rating DSL defines deterministic, versioned, testable rating logic. See `packages/rating-dsl/README.md` for full syntax and example.
+1. Customer or agent creates an intake.
+2. Quote service generates deterministic quote from versioned rating rules.
+3. Risk service evaluates quote against active risk appetite policy.
+4. Policy service creates bind request from quote/risk snapshots.
+5. Human underwriter approves bind.
+6. Policy service issues active policy record.
+7. Policy packet draft is generated from approved templates.
+8. Event outbox publishes lifecycle events.
+9. Blockchain gateway commits approved policy/audit hashes only, never PII.
 
-### Key Principles
+### Claims
 
-1. Rating is deterministic: same inputs + same version = same output.
-2. Rating is versioned: every change creates a new version.
-3. Rating is auditable: every factor is stored with the quote.
-4. Rating is testable: every configuration can be validated with tests.
-5. Rating is explainable: every output includes factor breakdown.
+1. Customer, agent, or claims staff creates FNOL.
+2. Claim ownership is stamped from tenant/customer context.
+3. Claim is triaged into queue and severity.
+4. Evidence metadata is collected with checksum/source/visibility.
+5. Adjuster recommends reserves.
+6. Claims Manager approves reserves and denial review.
+7. Denial review generates adverse-action/claim denial draft only.
+8. Approved communication uses legally reviewed templates.
+9. Event outbox records material claim transitions.
+
+### AI authority model
+
+AI may assist with intake, explanations, summarization, routing, and draft communications. AI must not independently bind policies, decline risks, deny claims, modify rating logic, approve treasury actions, approve product/rate/form changes, or execute smart-contract administration.
+
+## Production-grade system vision
+
+A complete production implementation should include these user-facing applications:
+
+- **Customer portal**: intake, quotes, policies, billing, documents, FNOL, claim status, secure messages.
+- **Agent desktop**: customer search, quote workflow, underwriting referrals, bind request prep, document collection.
+- **Underwriter console**: risk queue, appetite limits, quote/risk explainability, bind approvals, decline review.
+- **Claims workspace**: FNOL, evidence, coverage review, reserves, manager approvals, denial review, communications.
+- **Policy admin console**: endorsements, cancellations, reinstatements, renewals, forms, templates, audit timeline.
+- **Treasury/float console**: premium allocation, reserves, liquidity ladder, IPS controls, counterparty limits, approvals.
+- **Compliance console**: adverse-action notices, filings, template versions, audit exports, complaint tracking.
+- **Security/admin console**: tenants, users, roles, IdP config, secrets status, service health, event replay.
+- **Blockchain/audit console**: commitments, event hashes, registry state, signer approvals, chain health.
+
+See `docs/12_production_ui_design.md` and `docs/13_remaining_gap_register.md` for the next implementation plan.
+
+## CI and quality gates
+
+Current CI validates:
+
+- required documentation metadata;
+- rating DSL golden tests;
+- security tests;
+- orchestration tests;
+- events/documents/observability tests;
+- quote/risk/policy/claims repository and API tests;
+- SQL migration baselines;
+- compose configuration;
+- Postgres integration scaffold.
+
+## Current high-priority gaps
+
+1. Full customer/account service as ownership source of truth.
+2. UI applications and design-system implementation.
+3. Real event broker adapter and dead-letter handling.
+4. Production OpenTelemetry exporter.
+5. Legal-approved document templates.
+6. Blockchain gateway implementation.
+7. Treasury/float service implementation.
+8. Policy admin lifecycle beyond initial bind.
+9. End-to-end integration tests across quote, risk, policy, claims, events, and documents.
+10. Production-grade deployment manifests, secret management, and operational runbooks.
+
+## Documentation map
+
+- `docs/00_documentation_index.md` — documentation entry point.
+- `docs/05_production_gap_closure.md` — production hardening status.
+- `docs/07_employee_operating_manual.md` — employee operating procedures.
+- `docs/08_claims_crm_operating_guide.md` — claims CRM target workflow.
+- `docs/11_next_pr_review_plan.md` — PR review sequence.
+- `docs/12_production_ui_design.md` — production UI design target.
+- `docs/13_remaining_gap_register.md` — remaining implementation gap register.
