@@ -1,0 +1,65 @@
+name: Postgres Integration CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  postgres-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: auto_insurance_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "pytest>=8.3" "fastapi>=0.115" "httpx>=0.28" "pydantic>=2.10" "pydantic-settings>=2.7" "pyyaml>=6.0" "sqlalchemy>=2.0" "psycopg2-binary>=2.9" "PyJWT>=2.10"
+
+      - name: Validate Postgres connection
+        env:
+          DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/auto_insurance_test
+        run: |
+          python - <<'PY'
+          import os
+          from sqlalchemy import create_engine, text
+          engine = create_engine(os.environ['DATABASE_URL'])
+          with engine.connect() as conn:
+              assert conn.execute(text('select 1')).scalar() == 1
+          PY
+
+      - name: Run quote repository tests against Postgres
+        env:
+          PYTHONPATH: services/quote-service:packages/rating-dsl:packages/security
+          QUOTE_SERVICE_DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/auto_insurance_test
+        run: pytest services/quote-service/tests/test_quote_repository.py
+
+      - name: Run risk repository tests against Postgres
+        env:
+          PYTHONPATH: services/risk-appetite-service:packages/security
+          RISK_APPETITE_DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/auto_insurance_test
+        run: pytest services/risk-appetite-service/tests/test_risk_repository.py
+
+      - name: Run policy repository tests against Postgres
+        env:
+          PYTHONPATH: services/policy-service:packages/security
+          POLICY_SERVICE_DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/auto_insurance_test
+        run: pytest services/policy-service/tests/test_policy_repository.py
