@@ -8,6 +8,7 @@ from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from insurance_observability import CorrelationIdMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -25,7 +26,7 @@ app = FastAPI(
     description="Risk appetite policy evaluation for insurance quotes",
     version="0.1.0",
 )
-
+app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
