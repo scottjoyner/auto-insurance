@@ -6,13 +6,14 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from insurance_security.fastapi import ActorContext, Role, require_roles
 from quote_service.config.settings import settings
+from quote_service.domain.models import QuoteStatus
 from quote_service.engine.explainability import QuoteExplainability
 from quote_service.engine.quote_engine import QuoteEngine
 from quote_service.storage.database import create_schema, get_session
@@ -63,6 +64,7 @@ def get_quote_repository(session: Session = Depends(get_session)) -> QuoteReposi
 
 quote_write_actor = require_roles(Role.CUSTOMER, Role.AGENT, Role.UNDERWRITER_L1)
 quote_read_actor = require_roles(Role.CUSTOMER, Role.AGENT, Role.UNDERWRITER_L1, Role.UNDERWRITER_L2)
+quote_accept_actor = require_roles(Role.AGENT, Role.UNDERWRITER_L1, Role.UNDERWRITER_L2)
 
 
 class QuoteRequest(BaseModel):
@@ -156,6 +158,19 @@ def create_quote(
     return QuoteResponse(**persisted.to_dict())
 
 
+@app.get("/quotes", response_model=list[QuoteResponse])
+def list_quotes(
+    status: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    actor: ActorContext = Depends(quote_read_actor),
+    repository: QuoteRepository = Depends(get_quote_repository),
+):
+    """List persisted quotes, optionally filtered by status."""
+    _ = actor
+    parsed_status = QuoteStatus(status) if status else None
+    return [QuoteResponse(**quote.to_dict()) for quote in repository.list(status=parsed_status, limit=limit)]
+
+
 @app.get("/quotes/{quote_id}", response_model=QuoteResponse)
 def get_quote(
     quote_id: str,
@@ -168,6 +183,26 @@ def get_quote(
     if quote is None:
         raise HTTPException(status_code=404, detail="Quote not found")
     return QuoteResponse(**quote.to_dict())
+
+
+@app.post("/quotes/{quote_id}/accept", response_model=QuoteResponse)
+def accept_quote(
+    quote_id: str,
+    actor: ActorContext = Depends(quote_accept_actor),
+    repository: QuoteRepository = Depends(get_quote_repository),
+):
+    """Accept a quote and mark it converted for the policy bind workflow."""
+    quote = repository.get(quote_id)
+    if quote is None:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    if not quote.bind_eligible:
+        raise HTTPException(status_code=409, detail="Quote is not bind eligible")
+    accepted = repository.accept(quote_id, actor_id=actor.actor_id)
+    if accepted is None:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    if accepted.status == QuoteStatus.EXPIRED:
+        raise HTTPException(status_code=409, detail="Quote expired before acceptance")
+    return QuoteResponse(**accepted.to_dict())
 
 
 @app.post("/quotes/{quote_id}/recalculate", response_model=RecalculateResponse)
