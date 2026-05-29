@@ -29,8 +29,8 @@ def _client():
     return TestClient(app)
 
 
-def _headers(role="AGENT"):
-    return {"Authorization": f"Bearer dev:test-user:{role}"}
+def _headers(role="AGENT", tenant="tenant-1", customer="customer-1"):
+    return {"Authorization": f"Bearer dev:test-user:{role}:{tenant}:{customer}"}
 
 
 def _bind_payload(**overrides):
@@ -76,6 +76,37 @@ def test_bind_request_and_approval_flow():
     policy = client.get(f"/policies/{approved.json()['policy_id']}", headers=_headers("AGENT"))
     assert policy.status_code == 200
     assert policy.json()["policy_id"] == approved.json()["policy_id"]
+    app.dependency_overrides.clear()
+
+
+def test_policy_access_is_customer_scoped():
+    client = _client()
+    payload = _bind_payload(request_key="owned-bind")
+    created = client.post("/bind-requests", json=payload, headers=_headers("AGENT", "tenant-1", "customer-1"))
+    assert created.status_code == 200
+
+    forbidden_bind = client.get(
+        f"/bind-requests/{created.json()['bind_request_id']}",
+        headers=_headers("AGENT", "tenant-1", "customer-2"),
+    )
+    assert forbidden_bind.status_code == 403
+
+    approved = client.post(
+        f"/bind-requests/{created.json()['bind_request_id']}/approve",
+        json={"approval_status": "approved", "comments": "Approved"},
+        headers=_headers("UNDERWRITER_L1", "tenant-1", "customer-1"),
+    )
+    assert approved.status_code == 200
+
+    forbidden_policy = client.get(
+        f"/policies/{approved.json()['policy_id']}",
+        headers=_headers("AGENT", "tenant-1", "customer-2"),
+    )
+    assert forbidden_policy.status_code == 403
+
+    listed = client.get("/policies", headers=_headers("AGENT", "tenant-1", "customer-2"))
+    assert listed.status_code == 200
+    assert listed.json() == []
     app.dependency_overrides.clear()
 
 
