@@ -1,0 +1,35 @@
+# Document Service Configuration (Phase P1.2)
+
+```javascript
+{
+  "port": 3002, // Document service port
+  "database": {
+    "host": process.env.DATABASE_HOST || "localhost",
+    "port": parseInt(process.env.DATABASE_PORT) || 5432,
+    "name": process.env.DATABASE_NAME || "portfolio_management",
+    "user": process.env.DATABASE_USER,
+    "password": process.env.DATABASE_PASSWORD,
+    "ssl": true
+  },
+  "templateValidation": {
+    "requiredFields": ["document_type", "version"],
+    "allowedDocumentTypes": [
+      "quote_confirmation",
+      "policy_certificate",
+      "coverage_summary",
+      "premium_schedule",
+      "claims_notification",
+      "endorsement_addendum",
+      "certificate_of_insurance",
+      "renewal_notice",
+      "cancellation_notice",
+      "proof_of_loss_form"
+    ]
+  },
+  "signature": {
+    "enabled": true,
+    "provider": process.env.SIGNATURE_PROVIDER || "acro_sign",
+    "apiKey": process.env.SIGNATURE_API_KEY
+  }
+}
+```
