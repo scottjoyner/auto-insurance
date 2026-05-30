@@ -178,6 +178,13 @@ def _require_customer_access(record: CustomerRecord | None, actor: ActorContext)
     return record
 
 
+def _require_tenant_scope(tenant_id: str, actor: ActorContext) -> None:
+    if actor.is_privileged():
+        return
+    if actor.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant access denied")
+
+
 @app.post("/tenants")
 def create_tenant(input_data: TenantInput, actor: ActorContext = Depends(admin_actor), session: Session = Depends(get_session)):
     existing = session.get(TenantRecord, input_data.tenant_id)
@@ -203,6 +210,7 @@ def create_account(input_data: AccountInput, actor: ActorContext = Depends(admin
 
 @app.post("/customers", response_model=CustomerResponse)
 def create_customer(input_data: CustomerInput, actor: ActorContext = Depends(customer_write_actor), session: Session = Depends(get_session)):
+    _require_tenant_scope(input_data.tenant_id, actor)
     account = session.get(AccountRecord, input_data.account_id)
     if account is None or account.tenant_id != input_data.tenant_id:
         raise HTTPException(status_code=404, detail="Account not found")
