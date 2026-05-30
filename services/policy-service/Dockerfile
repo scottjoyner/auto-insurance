@@ -11,7 +11,7 @@ RUN apt-get update \
 COPY . .
 
 RUN python -m pip install --upgrade pip \
-    && pip install "fastapi>=0.115" "uvicorn>=0.34" "pydantic>=2.10" "pydantic-settings>=2.7" "sqlalchemy>=2.0" "PyJWT>=2.10"
+    && pip install "fastapi>=0.115" "uvicorn>=0.34" "pydantic>=2.10" "pydantic-settings>=2.7" "sqlalchemy>=2.0" "PyJWT>=2.10" "httpx>=0.28"
 
 EXPOSE 8003
 CMD ["uvicorn", "policy_service.api.app:app", "--host", "0.0.0.0", "--port", "8003"]
