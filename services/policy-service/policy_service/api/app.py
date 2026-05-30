@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from insurance_security.fastapi import ActorContext, Role, require_roles
 from policy_service.compliance import evaluate_bind_request
 from policy_service.config.settings import settings
+from policy_service.integrations.customer_validation import validate_actor_customer
 from policy_service.storage.database import create_schema, get_session
 from policy_service.storage.orm import BindRequestRecord, PolicyRecord
 from policy_service.storage.policy_repository import PolicyRepository
@@ -38,6 +39,17 @@ def startup_event():
 
 def get_repository(session: Session = Depends(get_session)) -> PolicyRepository:
     return PolicyRepository(session)
+
+
+def validate_customer_if_enabled(actor: ActorContext) -> None:
+    if not settings.validate_customer:
+        return
+    validate_actor_customer(
+        actor=actor,
+        customer_service_url=settings.customer_service_url,
+        bearer_token=f"dev:{actor.actor_id}:{','.join(sorted(actor.roles))}:{actor.tenant_id or ''}:{actor.customer_id or ''}",
+        timeout=settings.customer_validation_timeout_seconds,
+    )
 
 
 bind_actor = require_roles(Role.AGENT, Role.UNDERWRITER_L1, Role.UNDERWRITER_L2)
@@ -145,6 +157,7 @@ def create_bind_request(
 ) -> BindRequestResponse:
     if input_data.expiration_date <= input_data.effective_date:
         raise HTTPException(status_code=400, detail="expiration_date must be after effective_date")
+    validate_customer_if_enabled(actor)
     _ensure_bind_compliance(input_data)
     record = repository.create_bind_request(
         quote_id=input_data.quote_id,
@@ -198,6 +211,7 @@ def compatibility_create_bind_request(
 ) -> BindRequestResponse:
     if input_data.expiration_date <= input_data.effective_date:
         raise HTTPException(status_code=400, detail="expiration_date must be after effective_date")
+    validate_customer_if_enabled(actor)
     _ensure_bind_compliance(input_data)
     record = repository.create_bind_request(
         quote_id=input_data.quote_id,
@@ -241,5 +255,10 @@ def list_policies(
 
 
 @app.get("/health")
-def health_check() -> dict[str, str]:
-    return {"status": "healthy", "service": "policy-service", "persistence": "sqlalchemy"}
+def health_check() -> dict[str, str | bool]:
+    return {
+        "status": "healthy",
+        "service": "policy-service",
+        "persistence": "sqlalchemy",
+        "customer_validation_enabled": settings.validate_customer,
+    }
