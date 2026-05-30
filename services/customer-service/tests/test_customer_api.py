@@ -63,6 +63,22 @@ def test_create_tenant_account_customer_and_read():
     app.dependency_overrides.clear()
 
 
+def test_agent_cannot_create_customer_in_another_tenant():
+    client = _client()
+    tenant = client.post("/tenants", json={"tenant_id": "tenant-1", "name": "tenant-1"}, headers=_headers("ADMIN", "tenant-1", "admin"))
+    assert tenant.status_code == 200
+    account = client.post("/accounts", json={"tenant_id": "tenant-1", "name": "Household"}, headers=_headers("ADMIN", "tenant-1", "admin"))
+    assert account.status_code == 200
+
+    denied = client.post(
+        "/customers",
+        json={"tenant_id": "tenant-1", "account_id": account.json()["account_id"], "first_name": "No", "last_name": "Access"},
+        headers=_headers("AGENT", "tenant-2", "agent"),
+    )
+    assert denied.status_code == 403
+    app.dependency_overrides.clear()
+
+
 def test_customer_search_scopes_to_actor_tenant():
     client = _client()
     first = _seed_customer(client, tenant_id="tenant-1", first_name="Jane", last_name="Doe")
