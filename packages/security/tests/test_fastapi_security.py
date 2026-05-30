@@ -118,6 +118,46 @@ def test_jwt_auth_mode_validates_signed_token(monkeypatch):
     assert body["tenant_id"] == "tenant-1"
 
 
+def test_jwt_auth_mode_maps_external_group_claim(monkeypatch):
+    monkeypatch.setenv("INSURANCE_AUTH_MODE", "jwt")
+    monkeypatch.setenv("INSURANCE_JWT_HS256_SECRET", "test-secret")
+    monkeypatch.setenv("INSURANCE_JWT_ISSUER", "auto-insurance-test")
+    monkeypatch.setenv("INSURANCE_JWT_AUDIENCE", "auto-insurance-api")
+    monkeypatch.setenv("INSURANCE_JWT_ROLES_CLAIM", "groups")
+    monkeypatch.setenv("INSURANCE_JWT_ROLE_MAP", '{"insurance-agents":"AGENT"}')
+    token = _jwt(
+        {
+            "sub": "agent-1",
+            "groups": ["insurance-agents"],
+            "tenant_id": "tenant-1",
+            "customer_id": "customer-1",
+            "iss": "auto-insurance-test",
+            "aud": "auto-insurance-api",
+        }
+    )
+    response = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert response.json()["roles"] == ["AGENT"]
+
+
+def test_jwt_auth_mode_rejects_unmapped_external_group(monkeypatch):
+    monkeypatch.setenv("INSURANCE_AUTH_MODE", "jwt")
+    monkeypatch.setenv("INSURANCE_JWT_HS256_SECRET", "test-secret")
+    monkeypatch.setenv("INSURANCE_JWT_ISSUER", "auto-insurance-test")
+    monkeypatch.setenv("INSURANCE_JWT_AUDIENCE", "auto-insurance-api")
+    monkeypatch.setenv("INSURANCE_JWT_ROLES_CLAIM", "groups")
+    token = _jwt(
+        {
+            "sub": "agent-1",
+            "groups": ["insurance-agents"],
+            "iss": "auto-insurance-test",
+            "aud": "auto-insurance-api",
+        }
+    )
+    response = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+
+
 def test_jwt_auth_mode_rejects_bad_signature(monkeypatch):
     monkeypatch.setenv("INSURANCE_AUTH_MODE", "jwt")
     monkeypatch.setenv("INSURANCE_JWT_HS256_SECRET", "test-secret")
