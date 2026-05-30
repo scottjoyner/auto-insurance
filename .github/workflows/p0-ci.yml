@@ -171,5 +171,14 @@ jobs:
           CUSTOMER_SERVICE_DATABASE_URL: sqlite://
         run: pytest services/customer-service/tests/test_customer_api.py
 
+      - name: Run e2e ownership workflow
+        env:
+          PYTHONPATH: services/customer-service:services/quote-service:services/policy-service:services/claims-service:packages/rating-dsl:packages/security:packages/observability:packages/documents
+          QUOTE_SERVICE_DATABASE_URL: sqlite://
+          POLICY_SERVICE_DATABASE_URL: sqlite://
+          CLAIMS_SERVICE_DATABASE_URL: sqlite://
+          CUSTOMER_SERVICE_DATABASE_URL: sqlite://
+        run: pytest tests/e2e/test_customer_ownership_workflow.py
+
       - name: Compose config validation
         run: docker compose config
