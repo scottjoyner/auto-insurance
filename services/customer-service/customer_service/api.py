@@ -8,6 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from insurance_observability import CorrelationIdMiddleware
 from insurance_security.fastapi import ActorContext, Role, require_roles
+from insurance_security.settings import validate_security_settings
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -36,6 +37,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_event():
+    validate_security_settings()
     if settings.auto_create_schema:
         create_schema()
 
