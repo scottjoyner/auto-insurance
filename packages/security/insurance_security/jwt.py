@@ -43,6 +43,21 @@ def _decode_jwks(token: str, settings: SecuritySettings) -> dict[str, Any]:
     )
 
 
+def _extract_role_values(claims: dict[str, Any], settings: SecuritySettings) -> list[str]:
+    raw_roles = claims.get(settings.jwt_roles_claim) or claims.get("roles") or claims.get("role") or []
+    if isinstance(raw_roles, str):
+        return [raw_roles]
+    if isinstance(raw_roles, list | tuple | set):
+        return [str(value) for value in raw_roles]
+    raise JWTValidationError("JWT roles claim must be a string or list")
+
+
+def _map_role(role_value: str, settings: SecuritySettings) -> Role:
+    role_map = settings.jwt_role_map or {}
+    mapped = role_map.get(role_value, role_map.get(role_value.lower(), role_value))
+    return Role(str(mapped).upper())
+
+
 def validate_jwt_token(token: str, settings: SecuritySettings) -> ActorContext:
     """Validate a signed JWT and convert claims into ActorContext.
 
@@ -62,12 +77,10 @@ def validate_jwt_token(token: str, settings: SecuritySettings) -> ActorContext:
     if not actor_id:
         raise JWTValidationError("JWT missing sub claim")
 
-    role_values = claims.get("roles") or claims.get("role") or []
-    if isinstance(role_values, str):
-        role_values = [role_values]
+    role_values = _extract_role_values(claims, settings)
     roles: set[Role] = set()
     for role_value in role_values:
-        roles.add(Role(str(role_value).upper()))
+        roles.add(_map_role(role_value, settings))
     if not roles:
         raise JWTValidationError("JWT missing roles claim")
 
