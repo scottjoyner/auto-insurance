@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from insurance_security.fastapi import ActorContext, Role, require_roles
+from insurance_security.settings import validate_security_settings
 from policy_service.compliance import evaluate_bind_request
 from policy_service.config.settings import settings
 from policy_service.integrations.customer_validation import validate_actor_customer
@@ -33,6 +34,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_event():
+    validate_security_settings()
     if settings.auto_create_schema:
         create_schema()
 
