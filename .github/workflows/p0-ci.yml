@@ -57,6 +57,7 @@ jobs:
           python -m py_compile services/quote-service/alembic/versions/0001_phase1_quote_baseline.py
           python -m py_compile services/risk-appetite-service/alembic/versions/0001_phase1_risk_baseline.py
           python -m py_compile services/policy-service/alembic/versions/0001_phase1_policy_baseline.py
+          python -m py_compile services/customer-service/alembic/versions/0001_phase1_customer_baseline.py
 
       - name: Validate quote migration
         run: python scripts/apply_sql_migrations.py --database /tmp/quote_phase1.db --migrations services/quote-service/migrations
