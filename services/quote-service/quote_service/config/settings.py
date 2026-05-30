@@ -25,6 +25,11 @@ class QuoteServiceSettings(BaseSettings):
     database_url: str = "sqlite:///./quote_service.db"
     auto_create_schema: bool = True
 
+    # Customer service validation
+    validate_customer: bool = False
+    customer_service_url: str = "http://customer-service:8005"
+    customer_validation_timeout_seconds: float = 3.0
+
     # Quote defaults
     default_validity_days: int = 30
     max_validity_days: int = 365
