@@ -83,3 +83,50 @@ def test_customer_cannot_read_cross_tenant_customer():
     denied = client.get(f"/customers/{customer['customer_id']}", headers=_headers("CUSTOMER", "tenant-2", customer["customer_id"]))
     assert denied.status_code == 403
     app.dependency_overrides.clear()
+
+
+def test_create_contact_and_address_hydrates_summary():
+    client = _client()
+    customer = _seed_customer(client)
+    customer_id = customer["customer_id"]
+
+    contact = client.post(
+        f"/customers/{customer_id}/contacts",
+        json={"contact_type": "reference", "value": "contact-value", "is_primary": True},
+        headers=_headers("AGENT", "tenant-1", "agent"),
+    )
+    assert contact.status_code == 200
+    assert contact.json()["value"] == "contact-value"
+
+    address = client.post(
+        f"/customers/{customer_id}/addresses",
+        json={"line1": "line one", "city": "city", "state": "ST", "postal_code": "00000"},
+        headers=_headers("AGENT", "tenant-1", "agent"),
+    )
+    assert address.status_code == 200
+    assert address.json()["city"] == "city"
+
+    summary = client.get(f"/customers/{customer_id}/summary", headers=_headers("AGENT", "tenant-1", "agent"))
+    assert summary.status_code == 200
+    assert len(summary.json()["contacts"]) == 1
+    assert len(summary.json()["addresses"]) == 1
+    app.dependency_overrides.clear()
+
+
+def test_identity_link_create_and_lookup():
+    client = _client()
+    customer = _seed_customer(client)
+    customer_id = customer["customer_id"]
+
+    created = client.post(
+        f"/customers/{customer_id}/identity-links",
+        json={"provider": "test-provider", "subject": "subject-123"},
+        headers=_headers("ADMIN", "tenant-1", "admin"),
+    )
+    assert created.status_code == 200
+    assert created.json()["customer_id"] == customer_id
+
+    found = client.get("/identity-links/test-provider/subject-123", headers=_headers("ADMIN", "tenant-1", "admin"))
+    assert found.status_code == 200
+    assert found.json()["customer_id"] == customer_id
+    app.dependency_overrides.clear()
