@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from insurance_security.fastapi import ActorContext, Role, require_roles
+from insurance_security.settings import validate_security_settings
 from quote_service.config.settings import settings
 from quote_service.domain.models import QuoteStatus
 from quote_service.engine.explainability import QuoteExplainability
@@ -44,6 +45,7 @@ _engine: QuoteEngine | None = None
 
 @app.on_event("startup")
 def startup_event():
+    validate_security_settings()
     if settings.auto_create_schema:
         create_schema()
     if _engine is None:
