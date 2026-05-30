@@ -13,7 +13,15 @@ from sqlalchemy.orm import Session
 
 from customer_service.config import settings
 from customer_service.database import create_schema, get_session
-from customer_service.models import AccountRecord, CustomerEventRecord, CustomerRecord, TenantRecord
+from customer_service.models import (
+    AccountRecord,
+    AddressRecord,
+    ContactRecord,
+    CustomerEventRecord,
+    CustomerRecord,
+    IdentityLinkRecord,
+    TenantRecord,
+)
 
 app = FastAPI(title="Customer Service", version="0.1.0")
 app.add_middleware(CorrelationIdMiddleware)
@@ -55,6 +63,27 @@ class CustomerInput(BaseModel):
     last_name: str = ""
 
 
+class ContactInput(BaseModel):
+    contact_type: str = "email"
+    value: str
+    is_primary: bool = False
+
+
+class AddressInput(BaseModel):
+    address_type: str = "mailing"
+    line1: str
+    line2: str = ""
+    city: str
+    state: str
+    postal_code: str
+    country: str = "US"
+
+
+class IdentityLinkInput(BaseModel):
+    provider: str
+    subject: str
+
+
 class CustomerResponse(BaseModel):
     customer_id: str
     tenant_id: str
@@ -63,10 +92,38 @@ class CustomerResponse(BaseModel):
     status: str
 
 
+class ContactResponse(BaseModel):
+    contact_id: str
+    customer_id: str
+    contact_type: str
+    value: str
+    is_primary: bool
+
+
+class AddressResponse(BaseModel):
+    address_id: str
+    customer_id: str
+    address_type: str
+    line1: str
+    line2: str
+    city: str
+    state: str
+    postal_code: str
+    country: str
+
+
+class IdentityLinkResponse(BaseModel):
+    identity_link_id: str
+    tenant_id: str
+    customer_id: str
+    provider: str
+    subject: str
+
+
 class CustomerSummary(BaseModel):
     customer: CustomerResponse
-    contacts: list[dict] = Field(default_factory=list)
-    addresses: list[dict] = Field(default_factory=list)
+    contacts: list[ContactResponse] = Field(default_factory=list)
+    addresses: list[AddressResponse] = Field(default_factory=list)
 
 
 def _customer_response(record: CustomerRecord) -> CustomerResponse:
@@ -76,6 +133,40 @@ def _customer_response(record: CustomerRecord) -> CustomerResponse:
         account_id=record.account_id,
         display_name=record.display_name,
         status=record.status,
+    )
+
+
+def _contact_response(record: ContactRecord) -> ContactResponse:
+    return ContactResponse(
+        contact_id=record.contact_id,
+        customer_id=record.customer_id,
+        contact_type=record.contact_type,
+        value=record.value,
+        is_primary=record.is_primary,
+    )
+
+
+def _address_response(record: AddressRecord) -> AddressResponse:
+    return AddressResponse(
+        address_id=record.address_id,
+        customer_id=record.customer_id,
+        address_type=record.address_type,
+        line1=record.line1,
+        line2=record.line2,
+        city=record.city,
+        state=record.state,
+        postal_code=record.postal_code,
+        country=record.country,
+    )
+
+
+def _identity_response(record: IdentityLinkRecord) -> IdentityLinkResponse:
+    return IdentityLinkResponse(
+        identity_link_id=record.identity_link_id,
+        tenant_id=record.tenant_id,
+        customer_id=record.customer_id,
+        provider=record.provider,
+        subject=record.subject,
     )
 
 
@@ -123,6 +214,44 @@ def create_customer(input_data: CustomerInput, actor: ActorContext = Depends(cus
     return _customer_response(record)
 
 
+@app.post("/customers/{customer_id}/contacts", response_model=ContactResponse)
+def create_contact(customer_id: str, input_data: ContactInput, actor: ActorContext = Depends(customer_write_actor), session: Session = Depends(get_session)):
+    customer = _require_customer_access(session.get(CustomerRecord, customer_id), actor)
+    record = ContactRecord(contact_id=str(uuid4()), tenant_id=customer.tenant_id, customer_id=customer.customer_id, contact_type=input_data.contact_type, value=input_data.value, is_primary=input_data.is_primary)
+    session.add(record)
+    session.add(CustomerEventRecord(event_id=str(uuid4()), event_type="CustomerContactCreated", aggregate_id=customer.customer_id, actor_id=actor.actor_id, payload={"contact_type": record.contact_type}))
+    session.commit()
+    return _contact_response(record)
+
+
+@app.post("/customers/{customer_id}/addresses", response_model=AddressResponse)
+def create_address(customer_id: str, input_data: AddressInput, actor: ActorContext = Depends(customer_write_actor), session: Session = Depends(get_session)):
+    customer = _require_customer_access(session.get(CustomerRecord, customer_id), actor)
+    record = AddressRecord(address_id=str(uuid4()), tenant_id=customer.tenant_id, customer_id=customer.customer_id, address_type=input_data.address_type, line1=input_data.line1, line2=input_data.line2, city=input_data.city, state=input_data.state, postal_code=input_data.postal_code, country=input_data.country)
+    session.add(record)
+    session.add(CustomerEventRecord(event_id=str(uuid4()), event_type="CustomerAddressCreated", aggregate_id=customer.customer_id, actor_id=actor.actor_id, payload={"address_type": record.address_type}))
+    session.commit()
+    return _address_response(record)
+
+
+@app.post("/customers/{customer_id}/identity-links", response_model=IdentityLinkResponse)
+def create_identity_link(customer_id: str, input_data: IdentityLinkInput, actor: ActorContext = Depends(admin_actor), session: Session = Depends(get_session)):
+    customer = _require_customer_access(session.get(CustomerRecord, customer_id), actor)
+    record = IdentityLinkRecord(identity_link_id=str(uuid4()), tenant_id=customer.tenant_id, customer_id=customer.customer_id, provider=input_data.provider, subject=input_data.subject)
+    session.add(record)
+    session.add(CustomerEventRecord(event_id=str(uuid4()), event_type="CustomerIdentityLinked", aggregate_id=customer.customer_id, actor_id=actor.actor_id, payload={"provider": record.provider}))
+    session.commit()
+    return _identity_response(record)
+
+
+@app.get("/identity-links/{provider}/{subject}", response_model=IdentityLinkResponse)
+def get_identity_link(provider: str, subject: str, actor: ActorContext = Depends(admin_actor), session: Session = Depends(get_session)):
+    record = session.query(IdentityLinkRecord).filter(IdentityLinkRecord.provider == provider).filter(IdentityLinkRecord.subject == subject).first()
+    if record is None:
+        raise HTTPException(status_code=404, detail="Identity link not found")
+    return _identity_response(record)
+
+
 @app.get("/customers/{customer_id}", response_model=CustomerResponse)
 def get_customer(customer_id: str, actor: ActorContext = Depends(customer_read_actor), session: Session = Depends(get_session)):
     return _customer_response(_require_customer_access(session.get(CustomerRecord, customer_id), actor))
@@ -143,7 +272,9 @@ def search_customers(q: str | None = Query(default=None), limit: int = Query(def
 @app.get("/customers/{customer_id}/summary", response_model=CustomerSummary)
 def customer_summary(customer_id: str, actor: ActorContext = Depends(customer_read_actor), session: Session = Depends(get_session)):
     record = _require_customer_access(session.get(CustomerRecord, customer_id), actor)
-    return CustomerSummary(customer=_customer_response(record), contacts=[], addresses=[])
+    contacts = session.query(ContactRecord).filter(ContactRecord.customer_id == customer_id).all()
+    addresses = session.query(AddressRecord).filter(AddressRecord.customer_id == customer_id).all()
+    return CustomerSummary(customer=_customer_response(record), contacts=[_contact_response(item) for item in contacts], addresses=[_address_response(item) for item in addresses])
 
 
 @app.get("/health")
