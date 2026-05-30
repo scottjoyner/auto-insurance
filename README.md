@@ -35,14 +35,16 @@ The repository now contains a local, testable multi-service foundation.
 | Area | Status | Notes |
 |---|---|---|
 | Shared security | Implemented foundation | Dev tokens plus JWT/JWKS production path, RBAC, tenant/customer context. |
-| Quote service | Implemented foundation | Quote generation, persistence, explainability, acceptance, ownership enforcement, lifecycle records. |
+| Customer service | Implemented P0 foundation | Tenant, account, customer, contact, address, identity-link, scoped search, ownership checks. |
+| Quote service | Implemented foundation | Quote generation, persistence, explainability, acceptance, ownership enforcement, optional customer-service validation. |
 | Risk appetite service | Implemented foundation | Risk assessments, policy version lifecycle, activation guardrails, persisted assessments. |
-| Policy service | Implemented foundation | Bind requests, approval workflow, idempotency, compliance guard, issued policy records, ownership enforcement. |
-| Claims service | Implemented foundation | FNOL, claim ownership, evidence metadata, reserve approval, denial review, adverse-action draft. |
+| Policy service | Implemented foundation | Bind requests, approval workflow, idempotency, compliance guard, issued policy records, optional customer-service validation. |
+| Claims service | Implemented foundation | FNOL, claim ownership, evidence metadata, reserve approval, denial review, adverse-action draft, optional customer-service validation. |
 | Events | Implemented scaffold | Outbox records and publisher abstraction; production broker adapter still needed. |
 | Documents | Implemented scaffold | Policy packet and adverse-action draft renderers; legal templates still needed. |
 | Observability | Implemented scaffold | Correlation IDs and redaction helpers; OpenTelemetry exporter still needed. |
 | Database | Implemented foundation | SQL migrations, Alembic scaffolds, SQLite local mode, Postgres CI scaffold. |
+| E2E ownership tests | Implemented P0 starter | Customer -> quote -> bind -> policy -> claim ownership workflow is covered. |
 | Blockchain | Design target | Registry/audit commitment design remains to be built out into deployable gateway. |
 | Treasury/float | Design target | Needs reserve/liquidity/IPS/counterparty/approval implementation. |
 | UI | Design gap | Needs production console, customer portal, agent desktop, claims workspace, and admin/security views. |
@@ -60,13 +62,16 @@ auto-insurance/
     observability/          Correlation IDs and PII redaction
     secrets/                Secret-provider abstractions
   services/
+    customer-service/       Tenant/account/customer ownership source of truth
     quote-service/          Quote generation, persistence, explainability, accept
     risk-appetite-service/  Risk policy lifecycle and assessments
     policy-service/         Bind request, approval, policy issuance
     claims-service/         FNOL, evidence, reserves, denial-review workflow
+  tests/e2e/                Cross-service ownership workflow tests
   docs/                     Architecture, operating guides, gap registers, PR plans
   scripts/                  Migration and outbox utilities
   docker-compose.yml        Local stack
+  docker-compose.customer.yml Optional customer-service compose override
 ```
 
 ## Local development
@@ -77,11 +82,18 @@ Copy local env values:
 cp .env.example .env
 ```
 
-Run the stack:
+Run the base stack:
 
 ```bash
 docker compose build
 docker compose up
+```
+
+Run with customer-service override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.customer.yml build customer-service
+docker compose -f docker-compose.yml -f docker-compose.customer.yml up customer-service
 ```
 
 Default local service ports:
@@ -92,6 +104,7 @@ Default local service ports:
 | risk-appetite-service | 8002 |
 | policy-service | 8003 |
 | claims-service | 8004 |
+| customer-service | 8005 |
 | postgres | 5432 |
 
 ## Authentication modes
@@ -121,31 +134,46 @@ Required claims:
 - `tenant_id`
 - `customer_id`
 
+## Customer validation mode
+
+Quote, policy, and claims services support optional customer-service validation. It is disabled by default for local development.
+
+```bash
+QUOTE_SERVICE_VALIDATE_CUSTOMER=false
+POLICY_SERVICE_VALIDATE_CUSTOMER=false
+CLAIMS_SERVICE_VALIDATE_CUSTOMER=false
+```
+
+When enabled, the services fail closed if the current actor's tenant/customer context cannot be validated by customer-service.
+
 ## Core workflow vision
 
 ### Quote to policy
 
 1. Customer or agent creates an intake.
-2. Quote service generates deterministic quote from versioned rating rules.
-3. Risk service evaluates quote against active risk appetite policy.
-4. Policy service creates bind request from quote/risk snapshots.
-5. Human underwriter approves bind.
-6. Policy service issues active policy record.
-7. Policy packet draft is generated from approved templates.
-8. Event outbox publishes lifecycle events.
-9. Blockchain gateway commits approved policy/audit hashes only, never PII.
+2. Quote service optionally validates tenant/customer ownership against customer-service.
+3. Quote service generates deterministic quote from versioned rating rules.
+4. Risk service evaluates quote against active risk appetite policy.
+5. Policy service optionally validates tenant/customer ownership against customer-service.
+6. Policy service creates bind request from quote/risk snapshots.
+7. Human underwriter approves bind.
+8. Policy service issues active policy record.
+9. Policy packet draft is generated from approved templates.
+10. Event outbox publishes lifecycle events.
+11. Blockchain gateway commits approved policy/audit hashes only, never PII.
 
 ### Claims
 
 1. Customer, agent, or claims staff creates FNOL.
-2. Claim ownership is stamped from tenant/customer context.
-3. Claim is triaged into queue and severity.
-4. Evidence metadata is collected with checksum/source/visibility.
-5. Adjuster recommends reserves.
-6. Claims Manager approves reserves and denial review.
-7. Denial review generates adverse-action/claim denial draft only.
-8. Approved communication uses legally reviewed templates.
-9. Event outbox records material claim transitions.
+2. Claims service optionally validates tenant/customer ownership against customer-service.
+3. Claim ownership is stamped from tenant/customer context.
+4. Claim is triaged into queue and severity.
+5. Evidence metadata is collected with checksum/source/visibility.
+6. Adjuster recommends reserves.
+7. Claims Manager approves reserves and denial review.
+8. Denial review generates adverse-action/claim denial draft only.
+9. Approved communication uses legally reviewed templates.
+10. Event outbox records material claim transitions.
 
 ### AI authority model
 
@@ -176,22 +204,25 @@ Current CI validates:
 - security tests;
 - orchestration tests;
 - events/documents/observability tests;
-- quote/risk/policy/claims repository and API tests;
+- quote/risk/policy/claims/customer API and repository tests;
+- customer-validation tests for quote, policy, and claims;
+- customer -> quote -> bind -> policy -> claim e2e ownership workflow;
 - SQL migration baselines;
+- Alembic baseline syntax;
 - compose configuration;
 - Postgres integration scaffold.
 
 ## Current high-priority gaps
 
-1. Full customer/account service as ownership source of truth.
-2. UI applications and design-system implementation.
-3. Real event broker adapter and dead-letter handling.
-4. Production OpenTelemetry exporter.
-5. Legal-approved document templates.
-6. Blockchain gateway implementation.
-7. Treasury/float service implementation.
-8. Policy admin lifecycle beyond initial bind.
-9. End-to-end integration tests across quote, risk, policy, claims, events, and documents.
+1. UI applications and design-system implementation.
+2. Full end-to-end workflow coverage beyond the first ownership path.
+3. Real IdP RS256/JWKS fixture tests and production startup validation.
+4. Real event broker adapter and dead-letter handling.
+5. Production OpenTelemetry exporter.
+6. Legal-approved document templates and document-service.
+7. Blockchain gateway implementation.
+8. Treasury/float service implementation.
+9. Policy admin lifecycle beyond initial bind.
 10. Production-grade deployment manifests, secret management, and operational runbooks.
 
 ## Documentation map
