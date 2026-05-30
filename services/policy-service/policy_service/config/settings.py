@@ -18,6 +18,11 @@ class PolicyServiceSettings(BaseSettings):
     approval_request_expiry_hours: int = 24
     blockchain_gateway_url: str = "http://localhost:8545"
 
+    # Customer service validation
+    validate_customer: bool = False
+    customer_service_url: str = "http://customer-service:8005"
+    customer_validation_timeout_seconds: float = 3.0
+
     @field_validator("allowed_origins", mode="before")
     @classmethod
     def parse_allowed_origins(cls, value):
