@@ -1,0 +1,15 @@
+services:
+  customer-service:
+    build:
+      context: .
+      dockerfile: services/customer-service/Dockerfile
+    environment:
+      CUSTOMER_SERVICE_ALLOWED_ORIGINS: ${CUSTOMER_SERVICE_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8000}
+      CUSTOMER_SERVICE_ALLOW_CREDENTIALS: ${CUSTOMER_SERVICE_ALLOW_CREDENTIALS:-false}
+      CUSTOMER_SERVICE_DATABASE_URL: ${CUSTOMER_SERVICE_DATABASE_URL:-sqlite:////app/customer_service.db}
+      CUSTOMER_SERVICE_AUTO_CREATE_SCHEMA: ${CUSTOMER_SERVICE_AUTO_CREATE_SCHEMA:-true}
+    ports:
+      - "8005:8005"
+    depends_on:
+      postgres:
+        condition: service_healthy
