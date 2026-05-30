@@ -13,6 +13,11 @@ class ClaimsSettings(BaseSettings):
     allow_credentials: bool = False
     log_level: str = "INFO"
 
+    # Customer service validation
+    validate_customer: bool = False
+    customer_service_url: str = "http://customer-service:8005"
+    customer_validation_timeout_seconds: float = 3.0
+
     @field_validator("allowed_origins", mode="before")
     @classmethod
     def parse_allowed_origins(cls, value):
