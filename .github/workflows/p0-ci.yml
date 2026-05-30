@@ -143,6 +143,11 @@ jobs:
           POLICY_SERVICE_DATABASE_URL: sqlite://
         run: pytest services/policy-service/tests/test_policy_api.py
 
+      - name: Run policy customer validation tests
+        env:
+          PYTHONPATH: services/policy-service:packages/security:packages/observability
+        run: pytest services/policy-service/tests/test_customer_validation.py
+
       - name: Run claims repository tests
         env:
           PYTHONPATH: services/claims-service:packages/security:packages/observability:packages/documents
@@ -154,6 +159,11 @@ jobs:
           PYTHONPATH: services/claims-service:packages/security:packages/observability:packages/documents
           CLAIMS_SERVICE_DATABASE_URL: sqlite://
         run: pytest services/claims-service/tests/test_claims_api.py
+
+      - name: Run claims customer validation tests
+        env:
+          PYTHONPATH: services/claims-service:packages/security:packages/observability:packages/documents
+        run: pytest services/claims-service/tests/test_customer_validation.py
 
       - name: Run customer API tests
         env:
