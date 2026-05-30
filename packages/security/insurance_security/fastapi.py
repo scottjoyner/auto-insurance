@@ -8,7 +8,7 @@ from typing import Iterable
 
 from fastapi import Depends, Header, HTTPException, status
 
-from insurance_security.settings import get_security_settings
+from insurance_security.settings import get_security_settings, validate_security_settings
 
 
 class Role(StrEnum):
@@ -112,6 +112,7 @@ def get_actor_context(authorization: str | None = Header(default=None)) -> Actor
         if settings.auth_mode == "jwt":
             from insurance_security.jwt import validate_jwt_token
 
+            settings = validate_security_settings(settings)
             return validate_jwt_token(token, settings)
         if settings.auth_mode == "dev" or settings.allow_dev_tokens:
             return _parse_dev_token(token)
