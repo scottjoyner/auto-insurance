@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from claims_service.config import settings
 from claims_service.database import create_schema, get_session
+from claims_service.integrations.customer_validation import validate_actor_customer
 from claims_service.models import ClaimRecord
 from claims_service.repository import ClaimsRepository
 
@@ -37,6 +38,17 @@ def startup_event():
 
 def get_repository(session: Session = Depends(get_session)) -> ClaimsRepository:
     return ClaimsRepository(session)
+
+
+def validate_customer_if_enabled(actor: ActorContext) -> None:
+    if not settings.validate_customer:
+        return
+    validate_actor_customer(
+        actor=actor,
+        customer_service_url=settings.customer_service_url,
+        bearer_token=f"dev:{actor.actor_id}:{','.join(sorted(actor.roles))}:{actor.tenant_id or ''}:{actor.customer_id or ''}",
+        timeout=settings.customer_validation_timeout_seconds,
+    )
 
 
 claim_write_actor = require_roles(Role.CUSTOMER, Role.AGENT, Role.CLAIMS_MANAGER, Role.SYSTEM)
@@ -152,6 +164,7 @@ def create_fnol(
     actor: ActorContext = Depends(claim_write_actor),
     repository: ClaimsRepository = Depends(get_repository),
 ):
+    validate_customer_if_enabled(actor)
     claim = repository.create_fnol(
         policy_id=request.policy_id,
         tenant_id=actor.tenant_id,
@@ -286,4 +299,9 @@ def request_denial_review(
 
 @app.get("/health")
 def health():
-    return {"status": "healthy", "service": "claims-service", "persistence": "sqlalchemy"}
+    return {
+        "status": "healthy",
+        "service": "claims-service",
+        "persistence": "sqlalchemy",
+        "customer_validation_enabled": settings.validate_customer,
+    }
