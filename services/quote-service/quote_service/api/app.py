@@ -17,6 +17,7 @@ from quote_service.config.settings import settings
 from quote_service.domain.models import QuoteStatus
 from quote_service.engine.explainability import QuoteExplainability
 from quote_service.engine.quote_engine import QuoteEngine
+from quote_service.integrations.customer_validation import validate_actor_customer
 from quote_service.security.ownership import require_quote_access, scoped_quote_query, stamp_quote_owner
 from quote_service.storage.database import create_schema, get_session
 from quote_service.storage.orm import QuoteRecord
@@ -63,6 +64,17 @@ def init_engine(product_yaml_path: str) -> None:
 
 def get_quote_repository(session: Session = Depends(get_session)) -> QuoteRepository:
     return QuoteRepository(session)
+
+
+def validate_customer_if_enabled(actor: ActorContext) -> None:
+    if not settings.validate_customer:
+        return
+    validate_actor_customer(
+        actor=actor,
+        customer_service_url=settings.customer_service_url,
+        bearer_token=f"dev:{actor.actor_id}:{','.join(sorted(actor.roles))}:{actor.tenant_id or ''}:{actor.customer_id or ''}",
+        timeout=settings.customer_validation_timeout_seconds,
+    )
 
 
 quote_write_actor = require_roles(Role.CUSTOMER, Role.AGENT, Role.UNDERWRITER_L1)
@@ -140,6 +152,7 @@ def create_quote(
     actor: ActorContext = Depends(quote_write_actor),
     repository: QuoteRepository = Depends(get_quote_repository),
 ):
+    validate_customer_if_enabled(actor)
     engine = get_engine()
     quote = engine.generate_quote(
         applicant_data=req.applicant_data,
@@ -272,4 +285,5 @@ def health():
         "engine_initialized": _engine is not None,
         "auth_required": settings.require_auth,
         "persistence": "sqlalchemy",
+        "customer_validation_enabled": settings.validate_customer,
     }
